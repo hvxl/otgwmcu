@@ -6,10 +6,13 @@
 #include <WiFiManager.h>
 #include "upgrade.h"
 #include "proxy.h"
+#include "debug.h"
 
 #define WDTPERIOD 5000
 #define WDADDRESS 38
 #define WDPACKET 0xA5
+
+char fwversion[16];
 
 WiFiManager wifiManager;
 
@@ -49,6 +52,8 @@ void setup() {
 
   // Prepare the Serial to Network Proxy
   proxysetup();
+
+  debugsetup();
 }
 
 void loop() {
@@ -61,4 +66,6 @@ void loop() {
   // upgradeevent() will invoke proxyevent() if no
   // upgrade is in progress.
   upgradeevent();
+
+  debugevent();
 }

@@ -10,3 +10,7 @@
 
 #define LED1 D4
 #define LED2 D0
+
+#define BANNER "OpenTherm Gateway"
+
+extern char fwversion[];

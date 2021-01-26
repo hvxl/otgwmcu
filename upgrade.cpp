@@ -3,10 +3,13 @@
 #include <Ticker.h>
 #include "otgwmcu.h"
 #include "proxy.h"
+#include "debug.h"
 
 #define STX 0x0F
 #define ETX 0x04
 #define DLE 0x05
+
+#define XFER_MAX_ID 16
 
 #define byteswap(val) ((val << 8) | (val >> 8))
 
@@ -14,6 +17,7 @@ enum {
   FWSTATE_IDLE,
   FWSTATE_RSET,
   FWSTATE_VERSION,
+  FWSTATE_DUMP,
   FWSTATE_PREP,
   FWSTATE_CODE,
   FWSTATE_DATA
@@ -45,11 +49,18 @@ static byte fwstate = FWSTATE_IDLE;
 struct fwupdatedata {
   unsigned char buffer[80];
   unsigned char datamem[256];
+  unsigned char eedata[256];
   unsigned short codemem[4096];
   unsigned short failsafe[4];
   unsigned short prot[2];
   unsigned short errcnt, retries;
+  char *version;
 } *fwupd;
+
+struct xferdata {
+  unsigned short addr;
+  byte size, mask;
+};
 
 Ticker timeout;
 
@@ -73,6 +84,86 @@ void picreset() {
   delay(100);
   digitalWrite(PICRST,HIGH);
   pinMode(PICRST,INPUT);
+  // Serial.print("GW=R\r");
+}
+
+int vcompare(const char *version1, const char* version2) {
+  const char *s1 = version1, *s2 = version2;
+  int v1, v2, n;
+
+  while (*s1 && *s2) {
+    if (!sscanf(s1, "%d%n", &v1, &n)) return 0;
+    s1 += n;
+    if (!sscanf(s2, "%d%n", &v2, &n)) return 0;
+    s2 += n;
+    if (v1 < v2) return -1;
+    if (v1 > v2) return 1;
+    if (*s1 != *s2) {
+      // Alpha versions
+      if (*s1 == 'a') return -1;
+      if (*s2 == 'a') return 1;
+      // Beta versions
+      if (*s1 == 'b') return -1;
+      if (*s2 == 'b') return 1;
+      // Subversions
+      if (*s1 == 0) return -1;
+      if (*s2 == 0) return 1;
+    }
+    s1++;
+    s2++;
+  }
+}
+
+int eeprom(const char *version, struct xferdata *xfer) {
+  char buffer[64];
+  int last = 0, len, id, p1, p2, addr, size, mask, n;
+  File f;
+
+  f = LittleFS.open("/transfer.dat", "r");
+  if (!f) return last;
+  while (f.available()) {
+    len = f.readBytesUntil('\n', buffer, sizeof(buffer) - 1);
+    buffer[len] = '\0';
+    if ((n = sscanf(buffer, "%d %n%*s%n %x %d %x", &id, &p1, &p2, &addr, &size, &mask)) == 4) {
+      if (id >= XFER_MAX_ID);
+      buffer[p2] = '\0';
+      if (vcompare(version, buffer + p1) < 0) continue;
+      // debuglog("xfer[%d] = {%02x, %d, %0x2}\n", id, addr, size, mask);
+      xfer[id].addr = addr;
+      xfer[id].size = size;
+      xfer[id].mask = mask;
+      if (id > last) last = id;
+    }
+  }
+  f.close();
+  return last;
+}
+
+int transfer(const char *ver1, const char *ver2) {
+  struct xferdata xfer1[XFER_MAX_ID] = {}, xfer2[XFER_MAX_ID] = {};
+  int last, i, j, mask;
+  byte value;
+
+  last = min(eeprom(ver1, xfer1), eeprom(ver2, xfer2));
+  for (i = 0; i <= last; i++) {
+    if (xfer1[i].size) {
+      for (j = 0; j < xfer1[i].size; j++) {
+        if (xfer1[i].addr < 0x100) {
+          value = fwupd->eedata[xfer1[i].addr + j];
+        } else {
+          value = xfer1[i].addr & 0xff;
+        }
+        if (j < xfer2[i].size && xfer2[i].addr < 0x100) {
+          // Combine the masks
+          mask = xfer1[i].mask | xfer2[i].mask;
+          // Insert the 
+          debuglog("Transfer id %d from %02x to %02x, mask = %02x: %02x -> %02x\n",
+            i, xfer1[i].addr + j, xfer2[i].addr + j, ~mask & 0xff, fwupd->datamem[xfer2[i].addr + j], value);
+          fwupd->datamem[xfer2[i].addr + j] = fwupd->datamem[xfer2[i].addr + j] & mask | value & ~mask;
+        }
+      }
+    }
+  }
 }
 
 unsigned char hexcheck(char *hex, int len) {
@@ -263,6 +354,8 @@ bool verifydata(short pc, const byte *data, short len = 64) {
 }
 
 void fwupgradestop(int result) {
+  debuglog("Upgrade finished: Errorcode = %d\n%d retries, %d errors\n",
+    result, fwupd->retries, fwupd->errcnt);
   free((void *)fwupd);
   fwupd = nullptr;
   fwstate = FWSTATE_IDLE;
@@ -306,7 +399,6 @@ void fwupgradestep(const byte *packet = nullptr, int len = 0) {
       } else if (++fwupd->retries > 5) {
         fwupgradestop(ERROR_RETRIES);
       } else {
-        // Serial.print("\rGW=R\r");
         picreset();
       }
       break;
@@ -321,15 +413,41 @@ void fwupgradestep(const byte *packet = nullptr, int len = 0) {
         fwupd->failsafe[1] = 0x2000 | fwupd->prot[0] & 0x7ff; // CALL SelfProg
         fwupd->failsafe[2] = 0x118a;                          // BCF PCLATH,3
         fwupd->failsafe[3] = 0x2820;                          // GOTO 0x20
-        pc = 0x20;
-        erasecode(pc);
-        fwstate = FWSTATE_PREP;
+        if (*fwversion && fwupd->version) {
+          // Both old and new versions are known
+          // Dump the current eeprom data to be able to transfer the settings
+          pc = 0;
+          readdata(pc);
+          fwstate = FWSTATE_DUMP;
+        } else {
+          pc = 0x20;
+          erasecode(pc);
+          fwstate = FWSTATE_PREP;
+        }
       } else if (++fwupd->retries > 10) {
         fwupgradestop(ERROR_RETRIES);
       } else {
         byte fwcommand[] = {CMD_VERSION, 3};
         fwupgradecmd(fwcommand, sizeof(fwcommand));
         fwstate = FWSTATE_VERSION;
+      }
+      break;
+    case FWSTATE_DUMP:
+      if (packet != nullptr) {
+        memcpy(fwupd->eedata + pc, packet + 4, 64);
+        pc += 64;
+      } else if (++fwupd->retries > 5) {
+        fwupgradestop(ERROR_RETRIES);
+        break;
+      }
+      if (pc < 0x100) {
+        readdata(pc);
+      } else {
+        // Transfer the EEPROM settings
+        transfer(fwversion, fwupd->version);
+        pc = 0x20;
+        erasecode(pc);
+        fwstate = FWSTATE_PREP;
       }
       break;
     case FWSTATE_PREP:
@@ -415,6 +533,14 @@ void fwupgradestep(const byte *packet = nullptr, int len = 0) {
 }
 
 void fwupgradestart() {
+  unsigned short ptr;
+  char *s;
+
+  if (fwupd != nullptr) {
+    debuglog("Previous upgrade has not finished\n");
+    return;
+  }
+
   fwupd = (struct fwupdatedata *)malloc(sizeof(struct fwupdatedata));
   if (!readhex(fwupd->codemem, fwupd->datamem)) {
     fwupgradestop(ERROR_READFILE);
@@ -425,6 +551,20 @@ void fwupgradestart() {
     // Bad magic
     fwupgradestop(ERROR_MAGIC);
     return;
+  }
+
+  // Look for the new firmware version
+  ptr = 0;
+  while (ptr < 256) {
+    s = strstr((char *)fwupd->datamem + ptr, BANNER);
+    if (s == nullptr) {
+      ptr += strnlen((char *)fwupd->datamem + ptr, 256 - ptr) + 1;
+    } else {
+      s += sizeof(BANNER);   // Includes the terminating '\0'
+      fwupd->version = s;
+      debuglog("New firmware version: %s\n", s);
+      break;
+    }
   }
 
   fwupgradestep();
