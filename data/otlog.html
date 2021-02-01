@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>OTGW message log</title>
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="stylesheet" type="text/css" href="otgwmcu.css">
+<style>
+#logframe {
+  height: calc(100vh - 8em);
+  width: 80ch;
+  overflow-y: scroll;
+  border: black solid 1px;
+  margin: auto;
+}
+#log {
+  margin: 0.2em;
+}
+</style>
+<script src="otlog.js"></script>
+</head>
+<body onload="connect('otlog.ws', wsdata)">
+<div id="leftmenu">
+<h2>Links</h2>
+<a href="index.html">Status summary</a>
+<a href="otlog.html">Message log</a>
+<a href="firmware.html">Firmware upgrade</a>
+<br>
+<a href="about.html">About</a>
+</div>
+<div>
+<h1>OTGW message log</h1>
+<div id="logframe"><pre id="log"></pre></div>
+</div>
+</body>
+</html>

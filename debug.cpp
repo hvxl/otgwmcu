@@ -1,6 +1,7 @@
 // Copyright (c) 2021 - Schelte Bron
 
 #include <ESP8266WiFi.h>
+#include "otmon.h"
 
 const int port = 45256;
 
@@ -17,6 +18,19 @@ void debuglog(const char *fmt, ...) {
     len = vsprintf(buffer, fmt, argptr);
     va_end(argptr);
   
+    if (debugClient.availableForWrite() >= len) {
+      debugClient.write(buffer, len);
+    }
+  }
+}
+
+void debugmsg(char dir, unsigned message) {
+  char buffer[256];
+  int len;
+
+  if (debugClient) {
+    len = otformat(buffer, dir, message);
+    len += sprintf(buffer + len, "\r\n");
     if (debugClient.availableForWrite() >= len) {
       debugClient.write(buffer, len);
     }

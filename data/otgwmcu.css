@@ -1,0 +1,32 @@
+html {
+  background: white;
+}
+body {
+  display: grid;
+  grid-gap: 1em;
+  grid-template-columns: auto 1fr;
+  margin: 8px;
+}
+h1, h2 {
+  color: #509e0e;
+}
+h1 {
+  text-align: center;
+}
+#leftmenu {
+  background: #dff1d6;
+  height: calc(100vh - 16px);
+}
+#leftmenu h2 {
+  color: #ffffe0;
+  background: #509e0e;
+  text-align: center;
+  margin-top: 0px;
+}
+#leftmenu a {
+  display: block;
+  font-size: 120%;
+  padding: 0 0.5em;
+  text-decoration: none;
+  
+}

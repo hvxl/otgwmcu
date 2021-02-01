@@ -1,6 +1,7 @@
 // Copyright (c) 2021 - Schelte Bron
 
 #include <Ticker.h>
+#include "upgrade.h"
 #include "otgwmcu.h"
 #include "proxy.h"
 #include "debug.h"
@@ -178,13 +179,13 @@ unsigned char hexcheck(char *hex, int len) {
   return sum;
 }
 
-bool readhex(unsigned short *codemem, unsigned char *datamem, unsigned short *config = nullptr) {
+bool readhex(const char *hexfile, unsigned short *codemem, unsigned char *datamem, unsigned short *config = nullptr) {
   char hexbuf[48];
   int len, addr, tag, data, offs, linecnt = 0;
   bool rc = false;
   File f;
 
-  f = LittleFS.open("/gateway.hex", "r");
+  f = LittleFS.open(hexfile, "r");
   if (!f) return false;
   memset(codemem, -1, 4096 * sizeof(short));
   memset(datamem, -1, 256 * sizeof(char));
@@ -271,9 +272,8 @@ void fwupgradecmd(const unsigned char *cmd, int len) {
   Serial.write(ETX);
 }
 
-bool erasecode(short addr) {
+bool erasecode(short addr, bool rc = false) {
   byte fwcommand[] = {CMD_ERASEPROG, 1, 0, 0};
-  bool rc = false;
   short i;
   for (i = 0; i < 32; i++) {
     if (fwupd->codemem[addr + i] != 0xffff) {
@@ -384,6 +384,8 @@ void fwupgradestep(const byte *packet = nullptr, int len = 0) {
     lastcmd = cmd;
   }
 
+  // debuglog("fwupgradestep: state = %d, cmd = %d, packet = %d\n", fwstate, cmd, packet != nullptr);
+
   switch (fwstate) {
     case FWSTATE_IDLE:
       fwupd->errcnt = 0;
@@ -421,7 +423,7 @@ void fwupgradestep(const byte *packet = nullptr, int len = 0) {
           fwstate = FWSTATE_DUMP;
         } else {
           pc = 0x20;
-          erasecode(pc);
+          erasecode(pc, true);
           fwstate = FWSTATE_PREP;
         }
       } else if (++fwupd->retries > 10) {
@@ -465,7 +467,7 @@ void fwupgradestep(const byte *packet = nullptr, int len = 0) {
           if (++fwupd->retries > 5) {
             fwupgradestop(ERROR_RETRIES);
           } else {
-            erasecode(pc);
+            erasecode(pc, true);
           }
         }
       }
@@ -532,7 +534,7 @@ void fwupgradestep(const byte *packet = nullptr, int len = 0) {
   }
 }
 
-void fwupgradestart() {
+void fwupgradestart(const char *hexfile) {
   unsigned short ptr;
   char *s;
 
@@ -541,8 +543,11 @@ void fwupgradestart() {
     return;
   }
 
+  blink(0);
+  digitalWrite(LED1, LOW);
+
   fwupd = (struct fwupdatedata *)malloc(sizeof(struct fwupdatedata));
-  if (!readhex(fwupd->codemem, fwupd->datamem)) {
+  if (!readhex(hexfile, fwupd->codemem, fwupd->datamem)) {
     fwupgradestop(ERROR_READFILE);
     return;
   }
@@ -589,8 +594,6 @@ void upgradeevent() {
         // user will have to press the button for one millisecond longer.
         pressed = millis();
       } else if (millis() - pressed > 2000) {
-        blink(0);
-        digitalWrite(LED1, LOW);
         fwupgradestart();
         pressed = 0;
       }

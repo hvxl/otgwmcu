@@ -2,7 +2,9 @@
 
 #include <ESP8266WiFi.h>
 #include "otgwmcu.h"
+#include "otmon.h"
 #include "debug.h"
+#include "web.h"
 
 #define ETX 0x04
 
@@ -32,7 +34,7 @@ void proxyevent() {
         break;
       }
     }
-    
+
     //no free/disconnected spot so reject
     if (i == MAX_SRV_CLIENTS) {
       proxy.available().println("busy");
@@ -53,6 +55,9 @@ void proxyevent() {
   //check UART for data
   size_t len = (size_t)Serial.available();
   if (len) {
+    char src[2];
+    unsigned msg;
+    int pos, errnum;
     size_t cnt = Serial.readBytesUntil('\n', line + linelen, min(len, sizeof(line) - linelen));
     linelen += cnt;
     // Check for ETX to allow a firmware upgrade by an external tool
@@ -72,11 +77,19 @@ void proxyevent() {
         }
       }
 
-      char *s = strstr(line, BANNER);
-      if (s) {
-        s += sizeof(BANNER);
-        sscanf(s, "%s", fwversion);
-        debuglog("Current firmware version: %s\n", fwversion);
+      if (sscanf(line, "%1[ABRT]%8x%n", src, &msg, &pos) == 2 && pos == 9) {
+        otstatus(msg);
+        // debugmsg(src[0], msg);
+        websockotmessage(src[0], msg);
+      } else if (sscanf(line, "Error %d", &errnum) == 1) {
+        oterror(errnum);
+      } else {
+        char *s = strstr(line, BANNER);
+        if (s) {
+          s += sizeof(BANNER);
+          sscanf(s, "%s", fwversion);
+          debuglog("Current firmware version: %s\n", fwversion);
+        }
       }
 
       linelen = 0;

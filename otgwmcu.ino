@@ -7,6 +7,7 @@
 #include "upgrade.h"
 #include "proxy.h"
 #include "debug.h"
+#include "web.h"
 
 #define WDTPERIOD 5000
 #define WDADDRESS 38
@@ -54,6 +55,8 @@ void setup() {
   proxysetup();
 
   debugsetup();
+
+  websetup();
 }
 
 void loop() {
@@ -68,4 +71,6 @@ void loop() {
   upgradeevent();
 
   debugevent();
+
+  webevent();
 }

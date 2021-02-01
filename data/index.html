@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset=utf-8">
+<title>Opentherm Gateway Status Summary</title>
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="stylesheet" type="text/css" href="otgwmcu.css">
+<script>
+var query = {"var" : ["gui", "error"]};
+</script>
+<script src="status.js"></script>
+</head>
+<body onload="neutralall();connect('status.ws', wsdata)">
+<div id="leftmenu">
+<h2>Links</h2>
+<a href="index.html">Status summary</a>
+<a href="otlog.html">Message log</a>
+<a href="firmware.html">Firmware upgrade</a>
+<br>
+<a href="about.html">About</a>
+</div>
+<div id="section">
+<h1>OTGW Status Summary</h1>
+<div>
+<table width="98%">
+<tbody><tr>
+<td width="25%">Central heating enable</td>
+<td width="8%"><input type="checkbox" id="msgid0HB0" indeterminate onclick="return false"></td>
+<td width="25%">Central heating mode</td>
+<td width="8%"><input type="checkbox" id="msgid0LB1" indeterminate onclick="return false"></td>
+<td width="25%">Service request</td>
+<td width="8%"><input type="checkbox" id="msgid5HB0" indeterminate onclick="return false"></td>
+</tr>
+<tr>
+<td width="25%">Domestic hot water enable</td>
+<td width="8%"><input type="checkbox" id="msgid0HB1" indeterminate onclick="return false"></td>
+<td width="25%">Domestic hot water mode</td>
+<td width="8%"><input type="checkbox" id="msgid0LB2" indeterminate onclick="return false"></td>
+<td width="25%">Lockout-reset</td>
+<td width="8%"><input type="checkbox" id="msgid5HB1" indeterminate onclick="return false"></td>
+</tr>
+<tr>
+<td width="25%">Cooling enable</td>
+<td width="8%"><input type="checkbox" id="msgid0HB2" indeterminate onclick="return false"></td>
+<td width="25%">Cooling status</td>
+<td width="8%"><input type="checkbox" id="msgid0LB4" indeterminate onclick="return false"></td>
+<td width="25%">Low water pressure</td>
+<td width="8%"><input type="checkbox" id="msgid5HB2" indeterminate onclick="return false"></td>
+</tr>
+<tr>
+<td width="25%">Outside temp. comp. active</td>
+<td width="8%"><input type="checkbox" id="msgid0HB3" indeterminate onclick="return false"></td>
+<td width="25%">Flame status</td>
+<td width="8%"><input type="checkbox" id="msgid0LB3" indeterminate onclick="return false"></td>
+<td width="25%">Gas/flame fault</td>
+<td width="8%"><input type="checkbox" id="msgid5HB3" indeterminate onclick="return false"></td>
+</tr>
+<tr>
+<td width="25%">Central heating 2 enable</td>
+<td width="8%"><input type="checkbox" id="msgid0HB4" indeterminate onclick="return false"></td>
+<td width="25%">Central heating 2 mode</td>
+<td width="8%"><input type="checkbox" id="msgid0LB5" indeterminate onclick="return false"></td>
+<td width="25%">Air pressure fault</td>
+<td width="8%"><input type="checkbox" id="msgid5HB4" indeterminate onclick="return false"></td>
+</tr>
+<tr>
+<td width="25%">Fault indication</td>
+<td width="8%"><input type="checkbox" id="msgid0LB0" indeterminate onclick="return false"></td>
+<td width="25%">Diagnostic indication</td>
+<td width="8%"><input type="checkbox" id="msgid0LB6" indeterminate onclick="return false"></td>
+<td width="25%">Water over-temperature</td>
+<td width="8%"><input type="checkbox" id="msgid5HB5" indeterminate onclick="return false"></td>
+</tr>
+</tbody></table>
+<hr>
+<table width="98%">
+<tbody><tr>
+<td width="36%">Room temperature</td>
+<td id="msgid24" width="8%" align="right">---</td>
+<td width="5%">&deg;C</td>
+<td width="20px">&nbsp;</td>
+<td width="36%">Outside temperature</td>
+<td id="msgid27" width="8%" align="right">---</td>
+<td width="5%">&deg;C</td>
+</tr>
+<tr>
+<td width="36%">Room setpoint</td>
+<td id="msgid16" width="8%" align="right">---</td>
+<td width="5%">&deg;C</td>
+<td width="20px">&nbsp;</td>
+<td width="36%">Boiler water temperature</td>
+<td id="msgid25" width="8%" align="right">---</td>
+<td width="5%">&deg;C</td>
+</tr>
+<tr>
+<td width="36%">Remote override room setpoint</td>
+<td id="msgid9" width="8%" align="right">---</td>
+<td width="5%">&deg;C</td>
+<td width="20px">&nbsp;</td>
+<td width="36%">Return water temperature</td>
+<td id="msgid28" width="8%" align="right">---</td>
+<td width="5%">&deg;C</td>
+</tr>
+<tr>
+<td width="36%">Control setpoint</td>
+<td id="msgid1" width="8%" align="right">---</td>
+<td width="5%">&deg;C</td>
+<td width="20px">&nbsp;</td>
+<td width="36%">Domestic hot water temperature</td>
+<td id="msgid26" width="8%" align="right">---</td>
+<td width="5%">&deg;C</td>
+</tr>
+<tr>
+<td width="36%">Max. central heating water setpoint</td>
+<td id="msgid57" width="8%" align="right">---</td>
+<td width="5%">&deg;C</td>
+<td width="20px">&nbsp;</td>
+<td width="36%">Domestic hot water setpoint</td>
+<td id="msgid56" width="8%" align="right">---</td>
+<td width="5%">&deg;C</td>
+</tr>
+<tr>
+<td width="36%">Relative modulation level</td>
+<td id="msgid17" width="8%" align="right">---</td>
+<td width="5%">%</td>
+<td width="20px">&nbsp;</td>
+<td width="36%">Central heating water pressure</td>
+<td id="msgid18" width="8%" align="right">---</td>
+<td width="5%">bar</td>
+</tr>
+<tr>
+<td width="36%">Max. relative modulation level</td>
+<td id="msgid14" width="8%" align="right">---</td>
+<td width="5%">%</td>
+<td width="20px">&nbsp;</td>
+<td width="36%">OEM fault code</td>
+<td id="msgid5LB" width="8%" align="right">---</td>
+<td width="5%"></td>
+</tr>
+</tbody></table>
+<hr>
+<table style="margin: auto;">
+<tbody><tr>
+<td width="100pt" align="center">Error 01:</td>
+<td id="error1" width="50pt" align="center">0</td>
+<td width="100pt" align="center">Error 02:</td>
+<td id="error2" width="50pt" align="center">0</td>
+<td width="100pt" align="center">Error 03:</td>
+<td id="error3" width="50pt" align="center">0</td>
+<td width="100pt" align="center">Error 04:</td>
+<td id="error4" width="50pt" align="center">0</td>
+</tr>
+</tbody></table>
+</div>
+</div>
+</body></html>

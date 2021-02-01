@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>OTGW firmware upgrade</title>
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="stylesheet" type="text/css" href="otgwmcu.css">
+<script src="filelist.js"></script>
+<script src="table.js"></script>
+<style>
+table, th, td {
+  border: 1px solid #509e0e;
+}
+table {
+  border-collapse: collapse;
+}
+th {
+  background: #509e0e;
+  color: #ffffe0;
+}
+td {
+  text-align: center;
+}
+td.actions {
+  width: 1%;
+  white-space: nowrap;
+}
+button {
+  background: white;
+  border-width: 0px;
+  padding: 0.2em 0.5em 0em;
+}
+</style>
+</head>
+<body onload="buildtable('filelist', versionsort(ls, 1))">
+<div id="leftmenu">
+<h2>Links</h2>
+<a href="index.html">Status summary</a>
+<a href="otlog.html">Message log</a>
+<a href="firmware.html">Firmware upgrade</a>
+<br>
+<a href="about.html">About</a>
+</div>
+<div>
+<h1>OTGW firmware upgrade</h1>
+<div>
+<table style="margin: auto; width: 35em;">
+<thead>
+<tr class="header">
+<th>File</th>
+<th>Version</th>
+<th>Size</th>
+<th>Actions</th>
+</tr>
+</thead>
+<tbody id="filelist" style="display: none;">
+<!-- Row template -->
+<tr>
+<td name="name"></td>
+<td name="version"></td>
+<td name="size"></td>
+<td class="actions">
+<form method="post">
+<input type="hidden" name="name" value="">
+<input type="hidden" name="version" value="">
+<button name="action" value="delete"><img src="trash.png" alt="Delete" title="Delete"></button>
+<button name="action" value="update"><img src="refresh.png" alt="Update" title="Update"></button>
+<button name="action" value="download"><img src="download.png" alt="Download" title="Download"></button>
+</form>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div></body>
+</html>
