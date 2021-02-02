@@ -19,7 +19,7 @@ const char *hexheaders[] = {
 
 bool servefile(String path) {
   if (path.endsWith("/")) {
-    path += "index.htm";
+    path += "index.html";
   }
 
   String contentType;
@@ -55,7 +55,7 @@ void servefilesys() {
 }
 
 void mainpage() {
-  httpd.send(200, "text/plain", "Hello, World!");
+  servefile("/index.html");
 }
 
 void filelist() {
@@ -126,7 +126,7 @@ void firmware() {
   String action = httpd.arg("action");
   String filename = httpd.arg("name");
   String version = httpd.arg("version");
-  debuglog("Action: %s for %s\n", action.c_str(), filename.c_str());
+  debuglog("Action: %s %s\n", action.c_str(), filename.c_str());
   if (action == "download") {
     fwupgradestart(String("/" + filename).c_str());
   } else if (action == "update") {

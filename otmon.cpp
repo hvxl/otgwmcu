@@ -56,7 +56,6 @@ int otformat(char *buf, char dir, unsigned raw) {
   msg.raw = raw;
 
   gettimeofday(&now, nullptr);
-  now.tv_sec += 3600;
   tod = localtime(&now.tv_sec);
   s += sprintf(s, "%02d:%02d:%02d.%06d  ", tod->tm_hour, tod->tm_min, tod->tm_sec, (int)now.tv_usec);
   

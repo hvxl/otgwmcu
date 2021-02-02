@@ -1,6 +1,6 @@
 // -*- tcl -*-
-// Limit scrollback to 64 Mb
-const maxkb = 65536
+// Limit scrollback to 32 Mb
+const maxkb = 32768
 
 function connect(name, msgfunc) {
     var wsurl = "ws" + document.URL.match("s?://[^?#]+/") + name;

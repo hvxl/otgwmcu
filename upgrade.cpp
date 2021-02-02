@@ -82,10 +82,10 @@ void blink(short delayms = 200) {
 void picreset() {
   pinMode(PICRST,OUTPUT);
   digitalWrite(PICRST,LOW);
+  Serial.print("GW=R\r");
   delay(100);
   digitalWrite(PICRST,HIGH);
   pinMode(PICRST,INPUT);
-  // Serial.print("GW=R\r");
 }
 
 int vcompare(const char *version1, const char* version2) {
@@ -453,6 +453,8 @@ void fwupgradestep(const byte *packet = nullptr, int len = 0) {
       }
       break;
     case FWSTATE_PREP:
+      // Programming has started; invalidate the firmware version
+      *fwversion = '\0';
       if (cmd == CMD_ERASEPROG) {
         loadcode(pc, fwupd->failsafe, 4);
       } else if (cmd == CMD_WRITEPROG) {
@@ -559,6 +561,7 @@ void fwupgradestart(const char *hexfile) {
   }
 
   // Look for the new firmware version
+  fwupd->version = nullptr;
   ptr = 0;
   while (ptr < 256) {
     s = strstr((char *)fwupd->datamem + ptr, BANNER);

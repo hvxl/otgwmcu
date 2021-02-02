@@ -4,6 +4,7 @@
 #include "otgwmcu.h"
 #include <Wire.h>
 #include <WiFiManager.h>
+#include <TZ.h>
 #include "upgrade.h"
 #include "proxy.h"
 #include "debug.h"
@@ -45,6 +46,9 @@ void setup() {
   // The PIC may have been confused by garbage on the
   // serial interface when the NodeMCU resets.
   picreset();
+
+  // Configure NTP before WiFi, so DHCP can override the NTP server(s)
+  configTime(TZ_Europe_Amsterdam, "pool.ntp.org");
 
   // Setup WiFi
   wifiManager.setDebugOutput(false);
