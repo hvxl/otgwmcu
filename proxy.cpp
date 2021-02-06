@@ -47,18 +47,18 @@ void proxyevent() {
 
   //check TCP clients for data
   for (int i = 0; i < MAX_SRV_CLIENTS; i++) {
-    while (proxyClients[i].available() && Serial.availableForWrite() > 0) {
-      Serial.write(proxyClients[i].read());
+    while (proxyClients[i].available() && Pic.availableForWrite() > 0) {
+      Pic.write(proxyClients[i].read());
     }
   }
 
   //check UART for data
-  size_t len = (size_t)Serial.available();
+  size_t len = (size_t)Pic.available();
   if (len) {
     char src[2];
     unsigned msg;
     int pos, errnum;
-    size_t cnt = Serial.readBytesUntil('\n', line + linelen, min(len, sizeof(line) - linelen));
+    size_t cnt = Pic.readBytesUntil('\n', line + linelen, min(len, sizeof(line) - linelen));
     linelen += cnt;
     // Check for ETX to allow a firmware upgrade by an external tool
     if (cnt < len || line[linelen - 1] == ETX) {
@@ -83,13 +83,6 @@ void proxyevent() {
         websockotmessage(src[0], msg);
       } else if (sscanf(line, "Error %d", &errnum) == 1) {
         oterror(errnum);
-      } else {
-        char *s = strstr(line, BANNER);
-        if (s) {
-          s += sizeof(BANNER);
-          sscanf(s, "%s", fwversion);
-          debuglog("Current firmware version: %s\n", fwversion);
-        }
       }
 
       linelen = 0;

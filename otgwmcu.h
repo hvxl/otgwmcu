@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <LittleFS.h>
+#include <OTGWSerial.h>
 
 #define I2CSCL D1
 #define I2CSDA D2
@@ -11,6 +12,8 @@
 #define LED1 D4
 #define LED2 D0
 
-#define BANNER "OpenTherm Gateway"
+#define FIRMWARE "/gateway.hex"
 
-extern char fwversion[];
+extern OTGWSerial Pic;
+
+void fwupgradestart(const char *hexfile);
