@@ -108,12 +108,11 @@ size_t OTGWSerial::write(uint8_t c) {
   return HardwareSerial::write(c);
 }
 
-/*
-size_t OTGWSerial::write(const uint8_t *buffer, size_t size) {
+
+size_t OTGWSerial::write(const uint8_t *buffer, size_t len) {
   if (upgradeEvent()) return 0;
-  return HardwareSerial::write(buffer, size);
+  return HardwareSerial::write(buffer, len);
 }
-*/
 
 bool OTGWSerial::busy() {
   return upgradeEvent();
