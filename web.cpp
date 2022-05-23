@@ -11,11 +11,36 @@ WebServer httpd(80);
 
 // Bitmaps for subscriptions of web socket clients
 static unsigned int ws_status, ws_otlog;
+static unsigned int updays = 0;
 
 const char *hexheaders[] = {
   "Last-Modified",
   "X-Version"
 };
+
+unsigned int uptime() {
+  static unsigned int tstamp = 0;
+  unsigned int up, ms = millis();
+
+  up = ms - tstamp;
+  if (up >= 86400000) {
+    updays++;
+    tstamp += 86400000;
+  }
+  return up;
+}
+
+int running(char *buffer) {
+  unsigned int h, m, s, ms;
+  ms = uptime() % 86400000;
+  h = ms / 3600000;
+  ms = ms % 3600000;
+  m = ms / 60000;
+  ms = ms % 60000;
+  s = ms / 1000;
+  ms = ms % 1000;
+  return sprintf_P(buffer, PSTR("%lu days %02d:%02d:%02d.%03d"), updays, h, m, s, ms);
+}
 
 bool servefile(String path) {
   if (path.endsWith("/")) {
@@ -141,6 +166,59 @@ void firmware() {
   httpd.send(303, "text/html", "<a href='firmware.html'>Return</a>");
 }
 
+void debuginfo() {
+  FSInfo fsinfo;
+  char buffer[250];
+  int cnt;
+
+  httpd.chunkedResponseModeStart(200, "text/html");
+  httpd.sendContent_P(PSTR("<!DOCTYPE html>\n<html>\n<head>\n"
+    "<link rel=\"icon\" type=\"image/png\" href=\"favicon.png\">\n"
+    "<meta charset=\"utf-8\"/>\n<title>Slimme meter</title>\n"
+    "<style>\nbody {\n  background: white;\n}\n</style>\n"
+    "</head>\n<body>\n"));
+  // MAC address
+  sprintf_P(buffer, PSTR("MAC Address: %s<br>\n"), WiFi.macAddress().c_str());
+  httpd.sendContent(buffer);
+  // IP address
+  sprintf_P(buffer, PSTR("IP Address: %s<br>\n"), WiFi.localIP().toString().c_str());
+  httpd.sendContent(buffer);
+  // System uptime
+  cnt = sprintf_P(buffer, PSTR("Uptime: "));
+  cnt += running(buffer + cnt);
+  cnt += sprintf_P(buffer + cnt, PSTR("<br>\n"));
+  httpd.sendContent(buffer, cnt);
+  // Last reset reason
+  String str = ESP.getResetReason();
+  sprintf_P(buffer, PSTR("Reset reason: %s<br>\n"), str.c_str());
+  httpd.sendContent(buffer);
+  // File system usage
+  FSInfo fs;
+  LittleFS.info(fs);
+  sprintf_P(buffer, PSTR("File system: %d%% (%d/%d)<br>\n"), 100 * fs.usedBytes / fs.totalBytes, fs.usedBytes, fs.totalBytes);
+  httpd.sendContent(buffer);
+  // Sketch usage
+  const int sketchtotal = 1044464;
+  int sketchused = ESP.getSketchSize();
+  sprintf_P(buffer, PSTR("Program: %d%% (%d/%d)<br>\n"), 100 * sketchused / sketchtotal, sketchused, sketchtotal);
+  httpd.sendContent(buffer);
+  // Memory usage
+  const int memtotal = 81920;
+  int memused = memtotal - ESP.getFreeHeap();
+  sprintf_P(buffer, PSTR("Memory: %d%% (%d/%d)<br>\n"), 100 * memused / memtotal, memused, memtotal);
+  httpd.sendContent(buffer);
+  // Memory fragmentation
+  sprintf_P(buffer, PSTR("Fragmentation: %d%%<br>\n"), ESP.getHeapFragmentation());
+  httpd.sendContent(buffer);
+  // Platform versions
+  sprintf_P(buffer, PSTR("Core version: %s<br>SDK version: %s<br>\n"),
+    ESP.getCoreVersion().c_str(), ESP.getSdkVersion());
+  httpd.sendContent(buffer);
+
+  httpd.sendContent_P(PSTR("</body>\n</html>\n"));
+  httpd.chunkedResponseFinalize();
+}
+
 // Web sockets
 unsigned int websockdistribute(const char *str, unsigned int clients) {
   unsigned int n, fail = 0;
@@ -247,6 +325,7 @@ void websetup() {
   httpd.on("/", HTTP_GET, mainpage);
   httpd.on("/filelist.js", HTTP_GET, filelist);
   httpd.on("/firmware.html", HTTP_POST, firmware);
+  httpd.on("/debug.html", HTTP_GET, debuginfo);
   // Web sockets
   httpd.on("/status.ws", HTTP_GET, websockstatus);
   httpd.on("/otlog.ws", HTTP_GET, websockotlog);
@@ -259,4 +338,5 @@ void websetup() {
 
 void webevent() {
   httpd.handleClient();
+  uptime();
 }
