@@ -241,7 +241,7 @@ void oterror(int num) {
     }
 }
 
-char *initialreport(int num) {
+void initialreport(int num) {
     char jsonbuf[MAX_PAYLOAD_SIZE];
     int i, j, cnt = 0;
     unsigned short mask;
