@@ -1,6 +1,6 @@
 /*
   OTGWSerial.cpp - Library for OTGW PIC communication
-  Copyright (c) 2021 - Schelte Bron
+  Copyright (c) 2021, 2022 - Schelte Bron
 
   MIT License
 
@@ -39,8 +39,19 @@
 #define WEIGHT_DATAREAD 4
 #define WEIGHT_CODEPROG 10
 #define WEIGHT_DATAPROG 20
+#define WEIGHT_MAXIMUM  2000
 
-#define byteswap(val) ((val << 8) | (val >> 8))
+#define byteswap(val) (((val << 8) | (val >> 8)) & 0xffff)
+
+#ifdef DEBUG
+#define Dprintf(...) if (debugfunc) debugfunc(__VA_ARGS__)
+OTGWDebugFunction *debugfunc = nullptr;
+#endif
+
+char debugbuf[80];
+
+const char hexbytefmt[] = "%02x";
+const char hexwordfmt[] = "%04x";
 
 enum {
     FWSTATE_IDLE,
@@ -64,7 +75,44 @@ enum {
     CMD_RESET
 };
 
-static const char banner[] = "OpenTherm Gateway ";
+unsigned short p16f88recover(unsigned short, unsigned short *);
+unsigned short p16f1847recover(unsigned short, unsigned short *);
+
+const struct PicInfo PicInfo[] PROGMEM = {
+    {
+        256, 4096, 9, 0x2000, 0x2100, 32, 4, true,
+        {0x3fff, 0x158a, 0x3e00, 0x2600},
+        p16f88recover
+    }, {
+        256, 8192, 9, 0x8000, 0xf000, 32, 32, false,
+        {0x3fff, 0x319f, 0x3e00, 0x2600},
+        p16f1847recover
+    }
+};
+
+const char banner1[] PROGMEM = "OpenTherm Gateway ";
+const char banner2[] PROGMEM = "Opentherm gateway diagnostics - Version ";
+const char banner3[] PROGMEM = "OpenTherm Interface ";
+const char* const banners[] PROGMEM = {banner1, banner2, banner3};
+const byte newpic[] = {6, 2, 2};
+
+unsigned short p16f88recover(unsigned short addr, unsigned short *code) {
+    unsigned short cnt = 0;
+    code[cnt++] = addr & 0x800 ? 0x158a : 0x118a;   // pagesel SelfProg
+    code[cnt++] = 0x2000 | addr & 0x7ff;            // call    SelfProg
+    code[cnt++] = 0x118a;                           // pagesel 0x0000
+    code[cnt++] = 0x2820;                           // goto    0x0020
+    return cnt;
+}
+
+unsigned short p16f1847recover(unsigned short addr, unsigned short *code) {
+    unsigned short cnt = 0;
+    code[cnt++] = 0x3180 | addr >> 8;               // pagesel SelfProg
+    code[cnt++] = 0x2000 | addr & 0x7ff;            // call    SelfProg
+    code[cnt++] = 0x3180;                           // pagesel 0x0000
+    code[cnt++] = 0x2820;                           // goto    0x0020
+    return cnt;
+}
 
 OTGWSerial::OTGWSerial(int resetPin, int progressLed)
 : HardwareSerial(UART0), _reset(resetPin), _led(progressLed) {
@@ -72,7 +120,6 @@ OTGWSerial::OTGWSerial(int resetPin, int progressLed)
     // The PIC may have been confused by garbage on the
     // serial interface when the NodeMCU resets.
     resetPic();
-    _upgrade_stage = FWSTATE_IDLE;
     _version[0] = '\0';
     _version_pos = 0;
 }
@@ -123,12 +170,66 @@ void OTGWSerial::resetPic() {
         digitalWrite(_reset, HIGH);
         pinMode(_reset, INPUT);
     }
-    _banner_matched = 0;
+    _upgrade_stage = FWSTATE_IDLE;
+    for (int i = 0; i < FIRMWARE_COUNT; i++) _banner_matched[i] = 0;
 }
 
 const char *OTGWSerial::firmwareVersion() {
     return _version;
 }
+
+OTGWFirmware OTGWSerial::firmwareType() {
+    return _firmware;
+}
+
+String OTGWSerial::firmwareToString(OTGWFirmware fw) {
+    switch (fw) {
+     case FIRMWARE_OTGW:
+        return F("gateway");
+     case FIRMWARE_DIAG:
+        return F("diagnose");
+     case FIRMWARE_INTF:
+        return F("interface");
+     default:
+        return F("unknown");
+    }
+}
+
+String OTGWSerial::firmwareToString() {
+    return firmwareToString(firmwareType());
+}
+
+OTGWProcessor OTGWSerial::processor() {
+    int major;
+    if (sscanf(_version, "%d", &major) < 1) {
+        return PICUNKNOWN;
+    } else if (major < newpic[_firmware]) {
+        return PIC16F88;
+    } else {
+        return PIC16F1847;
+    }
+}
+
+String OTGWSerial::processorToString(OTGWProcessor pic) {
+    switch (pic) {
+     case PIC16F88:
+        return F("pic16f88");
+     case PIC16F1847:
+        return F("pic16f1847");
+     default:
+        return F("unknown");
+    }
+}
+
+String OTGWSerial::processorToString() {
+    return processorToString(processor());
+}
+
+#ifdef DEBUG
+void OTGWSerial::registerDebugFunc(OTGWDebugFunction *func) {
+    debugfunc = func;
+}
+#endif
 
 void OTGWSerial::registerFinishedCallback(OTGWUpgradeFinished *func) {
     _finishedFunc = func;
@@ -151,20 +252,26 @@ void OTGWSerial::progress(int weight) {
     }
 }
 
-// Look for the banner in the incoming data and extract the version number
+// Look for banners in the incoming data and extract the version number
 void OTGWSerial::matchBanner(char ch) {
-    if (banner[_banner_matched] == '\0') {
-        if (isspace(ch)) {
-            _version[_version_pos] = '\0';
-            _banner_matched = 0;
-            _version_pos = 0;
+    for (int i = 0; i < FIRMWARE_COUNT; i++) {
+        const char *banner = banners[i];
+        char c = pgm_read_byte(banner + _banner_matched[i]);
+        if (c == '\0') {
+            if (isspace(ch)) {
+                _version[_version_pos] = '\0';
+                _firmware = (OTGWFirmware)i;
+                _banner_matched[i] = 0;
+                _version_pos = 0;
+            } else {
+                _version[_version_pos++] = ch;
+            }
+        } else if (ch == c) {
+            _banner_matched[i]++;
         } else {
-            _version[_version_pos++] = ch;
-        }
-    } else if (ch != banner[_banner_matched++]) {
-        _banner_matched = 0;
-        if (ch == banner[_banner_matched]) {
-            _banner_matched++;
+            _banner_matched[i] = 0;
+            c = pgm_read_byte(banner + _banner_matched[i]);
+            if (ch == c) _banner_matched[i]++;
         }
     }
 }
@@ -174,25 +281,27 @@ unsigned char OTGWSerial::hexChecksum(char *hex, int len) {
     int val;
 
     while (len-- > 0) {
-        sscanf(hex, "%02x", &val);
+        sscanf(hex, hexbytefmt, &val);
         sum -= val;
         hex += 2;
     }
     return sum;
 }
 
-OTGWError OTGWSerial::readHexFile(const char *hexfile, int *total) {
+OTGWError OTGWSerial::readHexFile(const char *hexfile) {
     char hexbuf[48];
-    int len, addr, tag, data, offs, linecnt = 0, weight;
-    uint32_t codemap[4] = {};
+    int len, addr, tag, data, offs, linecnt = 0, weight, seg = 0, rowsize;
+    uint32_t codemap[8] = {};
     byte datamap = 0;
     OTGWError rc = OTGW_ERROR_HEX_FORMAT;
     File f;
 
     f = LittleFS.open(hexfile, "r");
-    if (!f) return OTGW_ERROR_HEX_ACCESS;
-    memset(_upgrade_data->codemem, -1, 4096 * sizeof(short));
+    if (!f) return finishUpgrade(OTGW_ERROR_HEX_ACCESS);
+
+    memset(_upgrade_data->codemem, -1, 8192 * sizeof(short));
     memset(_upgrade_data->datamem, -1, 256 * sizeof(char));
+    memset(_upgrade_data->eedata, -1, 256 * sizeof(char));
     weight = WEIGHT_RESET + WEIGHT_VERSION;
     f.setTimeout(0);
     while (f.readBytesUntil('\n', hexbuf, sizeof(hexbuf)) != 0) {
@@ -215,47 +324,103 @@ OTGWError OTGWSerial::readHexFile(const char *hexfile, int *total) {
         offs = 9;
         len >>= 1;
         if (tag == 0) {
-            if (addr >= 0x4400) {
-                // Bogus addresses
-                continue;
-            } else if (addr >= 0x4200) {
-                // Data memory
-                addr = (addr - 0x4200) >> 1;
-                while (len > 0) {
-                    if (sscanf(hexbuf + offs, "%04x", &data) != 1) break;
-                    if (!bitRead(datamap, addr / 64)) weight += WEIGHT_DATAPROG;
-                    bitSet(datamap, addr / 64);
-                    _upgrade_data->datamem[addr++] = byteswap(data);
-                    offs += 4;
-                    len--;
+            // Data record
+            addr = (addr >> 1) + (seg << 3);
+            if (addr == 0) {
+                // Determine the target PIC
+                int i, opc1, opc2;
+                if (sscanf(hexbuf + offs, "%4x%4x", &opc1, &opc2) != 2) {
+                    break;
                 }
-            } else if (addr >= 0x4000) {
-                // Configuration bits
-                continue;
-            } else {
+                for (i = 0; i < PICCOUNT; i++) {
+                    data = byteswap(opc1) & pgm_read_word(&PicInfo[i].magic[0]);
+                    if (data != pgm_read_word(&PicInfo[i].magic[1])) continue;
+                    data = byteswap(opc2) & pgm_read_word(&PicInfo[i].magic[2]);
+                    if (data != pgm_read_word(&PicInfo[i].magic[3])) continue;
+                    break;
+                }
+                if (i == PICCOUNT) {
+                    rc = OTGW_ERROR_MAGIC;
+                    break;
+                }
+                _upgrade_data->model = i;
+                memcpy_P(&_upgrade_data->info, PicInfo + i, sizeof(struct PicInfo));
+                rowsize = _upgrade_data->info.erasesize;
+            }
+            if (addr < _upgrade_data->info.codesize) {
                 // Program memory
-                addr >>= 1;
                 while (len > 0) {
-                    if (sscanf(hexbuf + offs, "%04x", &data) != 1) {
+                    if (sscanf(hexbuf + offs, hexwordfmt, &data) != 1) {
                         // Didn't find hex data
                         break;
                     }
-                    if (!bitRead(codemap[addr / (32 * 32)], (addr / 32) & 31)) weight += WEIGHT_CODEPROG;
-                    bitSet(codemap[addr / (32 * 32)], (addr / 32) & 31);
+                    if (!bitRead(codemap[addr / (32 * rowsize)], (addr / rowsize) & (rowsize - 1)))
+                      weight += WEIGHT_CODEPROG;
+                    bitSet(codemap[addr / (32 * rowsize)], (addr / rowsize) & (rowsize - 1));
                     _upgrade_data->codemem[addr++] = byteswap(data);
+                    offs += 4;
+                    len--;
+                }
+            } else if ((addr -= _upgrade_data->info.eebase) < 0) {
+                // Configuration bits or bogus data
+                continue;
+            } else if (addr < _upgrade_data->info.datasize) {
+                // Data memory
+                while (len > 0) {
+                    if (sscanf(hexbuf + offs, hexbytefmt, &data) != 1) break;
+                    if (!bitRead(datamap, addr / 64)) weight += WEIGHT_DATAPROG;
+                    bitSet(datamap, addr / 64);
+                    _upgrade_data->datamem[addr] = data;
+                    // Indicate the address probably needs to be written
+                    _upgrade_data->eedata[addr] = ~data;
+                    addr++;
                     offs += 4;
                     len--;
                 }
             }
             if (len) break;
         } else if (tag == 1) {
+            // End-of-file record
             rc = OTGW_ERROR_NONE;
             break;
+        } else if (tag == 2) {
+            // Extended segment address record
+            if (sscanf(hexbuf + offs, hexwordfmt, &data) != 1) break;
+            seg = data;
+        } else if (tag == 4) {
+            // Extended linear address record
+            if (sscanf(hexbuf + offs, hexwordfmt, &data) != 1) break;
+            seg = data << 12;
         }
     }
     f.close();
-    if (total) *total = weight;
-    return rc;
+
+    if (rc != OTGW_ERROR_NONE) return finishUpgrade(rc);
+
+    // The self-programming code will be skipped (assume 256 program words)
+    weight -= 8 * WEIGHT_CODEPROG;
+
+    // Look for the new firmware version
+    _upgrade_data->version = nullptr;
+    unsigned short ptr = 0;
+    while (ptr < _upgrade_data->info.datasize) {
+        char *s = strstr_P((char *)_upgrade_data->datamem + ptr, banner1);
+        if (s == nullptr) {
+            ptr += strnlen((char *)_upgrade_data->datamem + ptr,
+              _upgrade_data->info.datasize - ptr) + 1;
+        } else {
+            s += sizeof(banner1) - 1;   // Drop the terminating '\0'
+            _upgrade_data->version = s;
+            if (_firmware == FIRMWARE_OTGW && *_version) {
+                // Reading out the EEPROM settings takes 4 reads of 64 bytes
+                weight += 4 * WEIGHT_DATAREAD;
+            }
+            break;
+        }
+    }
+
+    _upgrade_data->total = weight;
+    return OTGW_ERROR_NONE;
 }
 
 int OTGWSerial::versionCompare(const char *version1, const char* version2) {
@@ -318,12 +483,12 @@ void OTGWSerial::transferSettings(const char *ver1, const char *ver2) {
     for (i = 0; i <= last; i++) {
         if (xfer1[i].size) {
             for (j = 0; j < xfer1[i].size; j++) {
-                if (xfer1[i].addr < 0x100) {
+                if (xfer1[i].addr < _upgrade_data->info.datasize) {
                     value = _upgrade_data->eedata[xfer1[i].addr + j];
                 } else {
                     value = xfer1[i].addr & 0xff;
                 }
-                if (j < xfer2[i].size && xfer2[i].addr < 0x100) {
+                if (j < xfer2[i].size && xfer2[i].addr < _upgrade_data->info.datasize) {
                     // Combine the masks
                     mask = xfer1[i].mask | xfer2[i].mask;
                     // Insert the old data into the data array
@@ -366,17 +531,28 @@ bool OTGWSerial::eraseCode(short addr, bool rc) {
     return rc;
 }
 
-void OTGWSerial::loadCode(short addr, const unsigned short *code, short len) {
+short OTGWSerial::loadCode(short addr, const unsigned short *code, short len) {
     byte i, fwcommand[4 + 2 * len];
     unsigned short *data = (unsigned short *)fwcommand + 2;
-    fwcommand[0] = CMD_WRITEPROG;
-    fwcommand[1] = len >> 2;
-    fwcommand[2] = addr & 0xff;
-    fwcommand[3] = addr >> 8;
+    short size = 0;
+
     for (i = 0; i < len; i++) {
         data[i] = code[i] & 0x3fff;
+        if (data[i] != 0x3fff) size = i + 1;
     }
-    fwCommand(fwcommand, sizeof(fwcommand));  
+    fwcommand[0] = CMD_WRITEPROG;
+    if (_upgrade_data->info.blockwrite) {
+        int block = _upgrade_data->info.groupsize;
+        size = (size + block - 1) / block;
+        fwcommand[1] = size;
+        size *= block;
+    } else {
+        fwcommand[1] = size;
+    }
+    fwcommand[2] = addr & 0xff;
+    fwcommand[3] = addr >> 8;
+    fwCommand(fwcommand, 4 + 2 * size);
+    return size;
 }
 
 void OTGWSerial::readCode(short addr, short len) {
@@ -400,42 +576,47 @@ bool OTGWSerial::verifyCode(const unsigned short *code, const unsigned short *da
     return rc;
 }
 
-void OTGWSerial::loadData(short addr) {
-    byte i;
-    byte fwcommand[68] = {CMD_WRITEDATA, 64};
-    fwcommand[2] = addr & 0xff;
-    fwcommand[3] = addr >> 8;
-    for (i = 0; i < 64; i++) {
-        fwcommand[i + 4] = _upgrade_data->datamem[addr + i];
+short OTGWSerial::loadData(short addr) {
+    short first = -1, last;
+    byte fwcommand[68] = {CMD_WRITEDATA};
+    for (short i = 0, pc = addr, ptr = 4; i < 64; i++, pc++) {
+        if (_upgrade_data->datamem[pc] != _upgrade_data->eedata[pc]) {
+            if (first < 0) first = pc;
+            last = pc;
+        } else if (first < 0) {
+            continue;
+        }
+        fwcommand[ptr++] = _upgrade_data->datamem[pc];
     }
-    fwCommand(fwcommand, sizeof(fwcommand));  
+    if (first < 0) return 0;
+    fwcommand[1] = last - first + 1;
+    fwcommand[2] = first & 0xff;
+    fwcommand[3] = first >> 8;
+    fwCommand(fwcommand, last - first + 5);
+    return last - first + 1;
 }
 
-void OTGWSerial::readData(short addr) {
-    byte fwcommand[] = {CMD_READDATA, 64, 0, 0};
+void OTGWSerial::readData(short addr, short len) {
+    byte fwcommand[] = {CMD_READDATA, (byte)len, 0, 0};
     fwcommand[2] = addr & 0xff;
     fwCommand(fwcommand, sizeof(fwcommand));
 }
 
-bool OTGWSerial::verifyData(short pc, const byte *data, short len) {
-    short i;
+bool OTGWSerial::verifyData(short addr, const byte *data, short len) {
     bool rc = true;
 
-    for (i = 0; i < len; i++) {
-        if (data[i] != _upgrade_data->datamem[pc + i]) {
-            _upgrade_data->errcnt++;
-            rc = false;
+    for (short i = 0, pc = addr; i < len; i++, pc++) {
+        if (_upgrade_data->datamem[pc] != _upgrade_data->eedata[pc]) {
+            if (data[i] != _upgrade_data->datamem[pc]) {
+                _upgrade_data->errcnt++;
+                rc = false;
+            }
         }
     }
     return rc;
 }
 
 OTGWError OTGWSerial::startUpgrade(const char *hexfile) {
-    int weight;
-    unsigned short ptr;
-    char *s;
-    OTGWError result;
-
     if (_upgrade_data != nullptr) {
         return OTGW_ERROR_INPROG;
     }
@@ -445,37 +626,17 @@ OTGWError OTGWSerial::startUpgrade(const char *hexfile) {
         return OTGW_ERROR_MEMORY;
     }
 
-    result = readHexFile(hexfile, &weight);
-    if (result != OTGW_ERROR_NONE) {
-        return finishUpgrade(result);
+    if (hexfile[0] == '/') {
+        // Absolute file name specifies the exact file to load
+        OTGWError rc = readHexFile(hexfile);
+        if (rc != OTGW_ERROR_NONE) return rc;
+    } else {
+        // A relative file name takes the file from the directory for the
+        // current PIC, which is determined based on the bootloader version
+        _upgrade_data->model = PICPROBE;
+        _upgrade_data->filename = hexfile;
+        _upgrade_data->total = WEIGHT_MAXIMUM;
     }
-
-    if (_upgrade_data->codemem[0] != 0x158a || (_upgrade_data->codemem[1] & 0x3e00) != 0x2600) {
-        // Bad magic
-        return finishUpgrade(OTGW_ERROR_MAGIC);
-    }
-    // The self-programming code will be skipped (assume 256 program words)
-    weight -= 8 * WEIGHT_CODEPROG;
-
-    // Look for the new firmware version
-    _upgrade_data->version = nullptr;
-    ptr = 0;
-    while (ptr < 256) {
-        s = strstr((char *)_upgrade_data->datamem + ptr, banner);
-        if (s == nullptr) {
-            ptr += strnlen((char *)_upgrade_data->datamem + ptr, 256 - ptr) + 1;
-        } else {
-            s += sizeof(banner) - 1;   // Drop the terminating '\0'
-            _upgrade_data->version = s;
-            if (*_version) {
-                // Reading out the EEPROM settings takes 4 reads of 64 bytes
-                weight += 4 * WEIGHT_DATAREAD;
-            }
-            break;
-        }
-    }
-
-    _upgrade_data->total = weight;
     stateMachine();
     return OTGW_ERROR_NONE;
 }
@@ -494,6 +655,7 @@ void OTGWSerial::stateMachine(const unsigned char *packet, int len) {
     if (_upgrade_stage != FWSTATE_IDLE && packet == nullptr) {
         int maxtries = (_upgrade_stage == FWSTATE_CODE || _upgrade_stage == FWSTATE_DATA ? 100 : 10);
         if (++_upgrade_data->retries >= maxtries) {
+            resetPic();
             finishUpgrade(OTGW_ERROR_RETRIES);
             return;
         }
@@ -519,18 +681,41 @@ void OTGWSerial::stateMachine(const unsigned char *packet, int len) {
         break;
      case FWSTATE_VERSION:
         if (data != nullptr) {
+            OTGWProcessor pic;
+            switch (packet[3]) {
+             case 1: pic = PIC16F88; break;
+             case 2: pic = PIC16F1847; break;
+             default:
+                finishUpgrade(OTGW_ERROR_DEVICE);
+                return;
+            }
+            // Check bootloader version against the target PIC
+            if (pic == _upgrade_data->model) {
+                // PIC matches the firmware
+            } else if (_upgrade_data->model == PICPROBE) {
+                // Select the file depending on the detected PIC model
+                char hexfile[40];
+                snprintf_P(hexfile, sizeof(hexfile), "/%s/%s",
+                  processorToString(pic).c_str(), _upgrade_data->filename);
+                OTGWError rc = readHexFile(hexfile);
+                if (rc == OTGW_ERROR_NONE) {
+                    // Correct the progress now the total has been determined
+                    progress(0);
+                } else {
+                    finishUpgrade(rc);
+                    return;
+                }
+            } else {
+                // Device doesn't match the firmware
+                finishUpgrade(OTGW_ERROR_DEVICE);
+                return;
+            }
             _upgrade_data->protectstart = data[2];
             _upgrade_data->protectend = data[3];
-            _upgrade_data->failsafe[0] = 0x158a;        // BSF PCLATH,3
-            if ((_upgrade_data->protectstart & 0x800) == 0) {
-                _upgrade_data->failsafe[0] = 0x118a;    // BCF PCLATH,3
-            }
-            _upgrade_data->failsafe[1] = 0x2000 | _upgrade_data->protectstart & 0x7ff;  // CALL SelfProg
-            _upgrade_data->failsafe[2] = 0x118a;        // BCF PCLATH,3
-            _upgrade_data->failsafe[3] = 0x2820;        // GOTO 0x20
+            _upgrade_data->info.recover(_upgrade_data->protectstart, _upgrade_data->failsafe);
             progress(WEIGHT_VERSION);
-            if (*_version && _upgrade_data->version) {
-                // Both old and new versions are known
+            if (_firmware == FIRMWARE_OTGW && *_version && _upgrade_data->version) {
+                // Both old and new gateway firmware versions are known
                 // Dump the current eeprom data to be able to transfer the settings
                 _upgrade_data->pc = 0;
                 readData(_upgrade_data->pc);
@@ -549,10 +734,18 @@ void OTGWSerial::stateMachine(const unsigned char *packet, int len) {
      case FWSTATE_DUMP:
         if (packet != nullptr) {
             progress(WEIGHT_DATAREAD);
-            memcpy(_upgrade_data->eedata + _upgrade_data->pc, packet + 4, 64);
+            const unsigned char *bytes = packet + 4;
+            for (int i = 0, pc = _upgrade_data->pc; i < 64; i++, pc++) {
+                if (_upgrade_data->datamem[pc] == _upgrade_data->eedata[pc]) {
+                    // The new firmware doesn't use this EEPROM address
+                    // Keep the bytes the same to keep track of this
+                    _upgrade_data->datamem[pc] = bytes[i];
+                }
+                _upgrade_data->eedata[pc] = bytes[i];
+            }
             _upgrade_data->pc += 64;
         }
-        if (_upgrade_data->pc < 0x100) {
+        if (_upgrade_data->pc < _upgrade_data->info.datasize) {
             readData(_upgrade_data->pc);
         } else {
             // Transfer the EEPROM settings
@@ -594,16 +787,22 @@ void OTGWSerial::stateMachine(const unsigned char *packet, int len) {
                     do {
                         _upgrade_data->pc += 32;
                     } while (_upgrade_data->pc + 31 >= _upgrade_data->protectstart && _upgrade_data->pc <= _upgrade_data->protectend);
-                    if (_upgrade_data->pc >= 0x1000) {
+                    if (_upgrade_data->pc >= _upgrade_data->info.codesize) {
                         _upgrade_data->pc = 0;
-                        loadData(_upgrade_data->pc);
                         _upgrade_stage = FWSTATE_DATA;
+                        while (loadData(_upgrade_data->pc) == 0) {
+                            _upgrade_data->pc += 64;
+                            if (_upgrade_data->pc >= _upgrade_data->info.datasize) {
+                                finishUpgrade(OTGW_ERROR_NONE);
+                                break;
+                            }
+                        }
                         break;
                     } else if (eraseCode(_upgrade_data->pc)) {
                         progress(WEIGHT_CODEPROG);
                         break;
                     }
-                } while (_upgrade_data->pc < 0x1000);
+                } while (_upgrade_data->pc < _upgrade_data->info.codesize);
             } else {
                 eraseCode(_upgrade_data->pc);
             }
@@ -616,16 +815,16 @@ void OTGWSerial::stateMachine(const unsigned char *packet, int len) {
         } else if (cmd == CMD_READDATA) {
             if (packet != nullptr && verifyData(_upgrade_data->pc, packet + 4)) {
                 progress(WEIGHT_DATAPROG);
-                _upgrade_data->pc += 64;
-                if (_upgrade_data->pc < 0x100) {
-                    // digitalWrite(LED2, LOW);
-                    loadData(_upgrade_data->pc);
-                } else {
-                    byte fwcommand[] = {CMD_RESET, 0};
-                    fwCommand(fwcommand, sizeof(fwcommand));
-                    finishUpgrade(OTGW_ERROR_NONE);
+                do {
+                    _upgrade_data->pc += 64;
+                    if (_upgrade_data->pc >= _upgrade_data->info.datasize) {
+                        finishUpgrade(OTGW_ERROR_NONE);
+                        break;
+                    }
                 }
+                while (loadData(_upgrade_data->pc) == 0);
             } else {
+                // Data is incorrect, try again
                 // digitalWrite(LED2, LOW);
                 loadData(_upgrade_data->pc);
             }
@@ -642,7 +841,13 @@ OTGWError OTGWSerial::finishUpgrade(OTGWError result) {
     short errors = _upgrade_data->errcnt, retries = _upgrade_data->retries;
     free((void *)_upgrade_data);
     _upgrade_data = nullptr;
-    _upgrade_stage = FWSTATE_IDLE;
+
+    if (_upgrade_stage != FWSTATE_IDLE) {
+        byte fwcommand[] = {CMD_RESET, 0};
+        fwCommand(fwcommand, sizeof(fwcommand));
+        _upgrade_stage = FWSTATE_IDLE;
+    }
+
     if (_finishedFunc) {
         _finishedFunc(result, errors, retries);
     }

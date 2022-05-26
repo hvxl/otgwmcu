@@ -1,6 +1,6 @@
 /*
   OTGWSerial.h - Library for OTGW PIC communication
-  Copyright (c) 2021 - Schelte Bron
+  Copyright (c) 2021, 2022 - Schelte Bron
 
   MIT License
 
@@ -29,6 +29,22 @@
 #include <HardwareSerial.h>
 
 typedef enum {
+    PIC16F88,
+    PIC16F1847,
+    PICCOUNT,
+    PICUNKNOWN,
+    PICPROBE
+} OTGWProcessor;
+
+typedef enum {
+    FIRMWARE_OTGW,
+    FIRMWARE_DIAG,
+    FIRMWARE_INTF,
+    FIRMWARE_COUNT,
+    FIRMWARE_UNKNOWN
+} OTGWFirmware;
+
+typedef enum {
     OTGW_ERROR_NONE,        // No error
     OTGW_ERROR_MEMORY,      // Not enough space
     OTGW_ERROR_HEX_ACCESS,  // Could not open hex file
@@ -39,20 +55,38 @@ typedef enum {
     OTGW_ERROR_MAGIC,       // Hex file does not contain expected data
     OTGW_ERROR_RESET,       // PIC reset failed
     OTGW_ERROR_RETRIES,     // Too many retries
-    OTGW_ERROR_MISMATCHES   // Too many mismatches
+    OTGW_ERROR_MISMATCHES,  // Too many mismatches
+    OTGW_ERROR_DEVICE       // Wrong PIC (16F88 <=> 16F1847)
 } OTGWError;
+
+struct PicInfo {
+    unsigned short datasize;
+    unsigned short codesize;
+    unsigned short confsize;
+    unsigned short cfgbase;
+    unsigned short eebase;
+    unsigned short erasesize;
+    unsigned short groupsize;
+    byte blockwrite;
+    unsigned short magic[4];
+    unsigned short (*recover)(unsigned short, unsigned short *);
+};
 
 typedef struct {
     unsigned char buffer[80];
     unsigned char datamem[256];
     unsigned char eedata[256];
-    unsigned short codemem[4096];
+    unsigned short codemem[8192];
     unsigned short failsafe[4];
     unsigned short protectstart, protectend;
     unsigned short pc, errcnt, retries, progress, total;
-    byte bufpos, checksum, lastcmd;
+    byte bufpos, checksum, lastcmd, model;
     unsigned long lastaction;
-    char *version;
+    struct PicInfo info;
+    union {
+        char *version;
+        const char *filename;
+    };
 } OTGWUpgradeData;
 
 typedef struct {
@@ -62,6 +96,7 @@ typedef struct {
 
 typedef void OTGWUpgradeFinished(OTGWError result, short errors, short retries);
 typedef void OTGWUpgradeProgress(int pct);
+typedef void OTGWDebugFunction(const char *fmt, ...);
 
 class OTGWSerial: public HardwareSerial {
 public:
@@ -90,37 +125,48 @@ public:
    inline size_t write(int8_t c) {return write((uint8_t) c);}
 
    const char *firmwareVersion();
+   OTGWFirmware firmwareType();
+   String firmwareToString(OTGWFirmware fw);
+   String firmwareToString();
+   OTGWProcessor processor();
+   String processorToString(OTGWProcessor pic);
+   String processorToString();
    bool busy();
    void resetPic();
    OTGWError startUpgrade(const char *hexfile);
    void registerFinishedCallback(OTGWUpgradeFinished *func);
    void registerProgressCallback(OTGWUpgradeProgress *func);
+#ifdef DEBUG
+   void registerDebugFunc(OTGWDebugFunction *func);
+#endif
 
 protected:
    OTGWUpgradeData *_upgrade_data = nullptr;
    OTGWUpgradeFinished *_finishedFunc = nullptr;
    OTGWUpgradeProgress *_progressFunc = nullptr;
+   OTGWProcessor model = PIC16F88;
    char _version[16];
    int _reset, _led;
-   byte _banner_matched, _version_pos, _upgrade_stage;
+   byte _banner_matched[FIRMWARE_COUNT], _version_pos, _upgrade_stage;
+   OTGWFirmware _firmware = FIRMWARE_UNKNOWN;
 
    void SetLED(int state);
    void progress(int weight);
    void matchBanner(char ch);
    unsigned char hexChecksum(char *hex, int len);
-   OTGWError readHexFile(const char *hexfile, int *total = nullptr);
+   OTGWError readHexFile(const char *hexfile);
 
    int versionCompare(const char *version1, const char* version2);
    int eepromSettings(const char *version, OTGWTransferData *xfer);
    void transferSettings(const char *ver1, const char *ver2);
    void fwCommand(const unsigned char *cmd, int len);
    bool eraseCode(short addr, bool rc = false);
-   void loadCode(short addr, const unsigned short *code, short len = 32);
+   short loadCode(short addr, const unsigned short *code, short len = 32);
    void readCode(short addr, short len = 32);
    bool verifyCode(const unsigned short *code, const unsigned short *data, short len = 32);
-   void loadData(short addr);
-   void readData(short addr);
-   bool verifyData(short pc, const byte *data, short len = 64);
+   short loadData(short addr);
+   void readData(short addr, short len = 64);
+   bool verifyData(short addr, const byte *data, short len = 64);
    void stateMachine(const unsigned char *packet = nullptr, int len = 0);
    OTGWError finishUpgrade(OTGWError result);
    bool upgradeEvent();
