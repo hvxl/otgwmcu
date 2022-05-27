@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Upgrade otgwmcu</title>
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="stylesheet" type="text/css" href="otgwmcu.css">
+</head>
+<body>
+<div id="leftmenu">
+<h2>Links</h2>
+<a href="index.html">Status summary</a>
+<a href="otlog.html">Message log</a>
+<a href="firmware.html">Firmware upgrade</a>
+<br>
+<a href="about.html">About</a>
+</div>
+<div>
+<h1>MCU firmware upgrade</h1>
+<form method='post' enctype='multipart/form-data'>
+<h2>Firmware</h2>
+<input type='file' accept='.bin,.bin.gz' name='firmware'>
+<input type='submit' value='Update Firmware'>
+</form>
+<form method='post' enctype='multipart/form-data'>
+<h2>File system</h2>
+<input type='file' accept='.bin,.bin.gz' name='filesystem'>
+<input type='submit' value='Update File system'>
+</form>
+</div>
+</body>
+</html>

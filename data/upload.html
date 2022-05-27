@@ -3,17 +3,26 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>File upload</title>
 <link rel="icon" type="image/png" href="favicon.png">
+<link rel="stylesheet" type="text/css" href="otgwmcu.css">
 <style>
-body {
-  background: white;
-}
 ul {
   margin: 0px;
 }
 </style>
 </head>
 <body>
+<div id="leftmenu">
+<h2>Links</h2>
+<a href="index.html">Status summary</a>
+<a href="otlog.html">Message log</a>
+<a href="firmware.html">Firmware upgrade</a>
+<br>
+<a href="about.html">About</a>
+</div>
+</div>
+<div>
 <h1>Upload a file</h1>
 <form method="post" enctype="multipart/form-data">
   <input type="hidden" id="dir" name="directory" value="">
@@ -25,6 +34,7 @@ ul {
   <br><br>
   <input class="button" type="submit" value="Upload">
 </form>
+</div>
 <script>
 let dir = document.getElementById("dir")
 if (dir) {

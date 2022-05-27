@@ -362,6 +362,47 @@ void uploadfile() {
     }
 }
 
+void upgrademain() {
+    httpd.sendHeader("Connection", "close");
+    httpd.send(200, "text/plain", (Update.hasError()) ? "FAIL" : "OK");
+    delay(100);
+    httpd.client().stop();
+    ESP.restart();
+}
+
+void upgradefile() {
+    HTTPUpload& upload = httpd.upload();
+    if (upload.status == UPLOAD_FILE_START) {
+        // WiFiUDP::stopAll();
+        debuglog("Update: %s\n", upload.filename.c_str());
+        if (upload.name == "filesystem") {
+            //start with max available size
+            uint32_t fsSize = (uint32_t)&_FS_end - (uint32_t)&_FS_start;
+            close_all_fs();
+            if (!Update.begin(fsSize, U_FS)){
+                debuglog("Update error %d\n", Update.getError());
+            }
+        } else {
+            //start with max available size
+            uint32_t fwSize = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
+            if (!Update.begin(fwSize)) {
+                debuglog("Update error %d\n", Update.getError());
+            }
+        }
+    } else if (upload.status == UPLOAD_FILE_WRITE) {
+        if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
+            debuglog("Update error %d\n", Update.getError());
+        }
+    } else if (upload.status == UPLOAD_FILE_END) {
+        if (Update.end(true)) { //true to set the size to the current progress
+            debuglog("Update Success: %u\nRebooting...\n", upload.totalSize);
+        } else {
+            debuglog("Update error %d\n", Update.getError());
+        }
+    }
+    yield();
+}
+
 void websetup() {
     // Serve files from flash file system
     httpd.onNotFound(servefilesys);
@@ -373,7 +414,9 @@ void websetup() {
     // Web sockets
     httpd.on("/status.ws", HTTP_GET, websockstatus);
     httpd.on("/otlog.ws", HTTP_GET, websockotlog);
+    // Maintenance
     httpd.on("/upload.html", HTTP_POST, uploadmain, uploadfile);
+    httpd.on("/upgrade.html", HTTP_POST, upgrademain, upgradefile);
 
     httpd.begin();
 }
