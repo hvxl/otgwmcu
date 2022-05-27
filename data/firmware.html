@@ -15,8 +15,13 @@ table {
   border-collapse: collapse;
 }
 caption {
-  text-align: left;
   padding: 1em 0 0.5em;
+}
+caption div {
+  display: flex;
+  justify-content: space-between;
+}
+caption span {
   font-size: 150%;
   font-weight: bold;
   color: var(--color);
@@ -54,7 +59,15 @@ button {
 <div style="margin: auto; width: 35em;">
 <div>
 <table id="filelist" width="100%">
-<caption></caption>
+<caption>
+<div>
+<span></span>
+<form action="upload.html">
+<input type="hidden" name="pic" value="">
+<button><img src="add.png" alt="Add" title="Add"></button>
+</form>
+</div>
+</caption>
 <thead>
 <tr class="header">
 <th width="45%">File</th>

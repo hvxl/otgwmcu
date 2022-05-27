@@ -16,9 +16,28 @@ ul {
 <body>
 <h1>Upload a file</h1>
 <form method="post" enctype="multipart/form-data">
-  Source file: <input type="file" id="filename" name="name">
+  <input type="hidden" id="dir" name="directory" value="">
+  Source file: <input type="file" id="filename" name="name" required>
+  <div id="version" style="display: none;">
+  <br>
+  Version: <input type="text" name="version" value="1.0" size="5" pattern="(\d+\.)*\d+" required title="Version number: dot-separated positive integers">
+  </div>
   <br><br>
   <input class="button" type="submit" value="Upload">
 </form>
+<script>
+let dir = document.getElementById("dir")
+if (dir) {
+    let query = new URLSearchParams(window.location.search)
+    let value = query.get("pic")
+    if (['pic16f88', 'pic16f1847'].includes(value)) {
+        dir.value = value
+	let w = document.getElementById("filename")
+	if (w) w.accept = ".hex"
+	w = document.getElementById("version")
+	if (w) w.style.display = ""
+    }
+}
+</script>
 </body>
 </html>

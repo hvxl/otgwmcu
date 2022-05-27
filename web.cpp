@@ -14,6 +14,8 @@ static unsigned int ws_status, ws_otlog;
 
 static unsigned int updays = 0;
 
+static File fsUploadFile;
+
 const char *hexheaders[] = {
     "Last-Modified",
     "X-Version"
@@ -308,8 +310,35 @@ void websockotlog() {
     httpd.upgrade(wsotlog);
 }
 
-void upload() {
-    static File fsUploadFile;
+void uploadmain() {
+    if (fsUploadFile) {
+        const char *location = "upload.html";
+        String name = fsUploadFile.fullName();
+        fsUploadFile.close();
+        if (httpd.arg("pic")) {
+            String dir = httpd.arg("pic");
+            if (dir != "") {
+                bool result = LittleFS.rename(name, "/" + dir + name);
+                if (name.endsWith(".hex")) {
+                    name.replace(".hex", ".ver");
+                    fsUploadFile = LittleFS.open("/" + dir + name, "w");
+                    if (fsUploadFile) {
+                        fsUploadFile.printf("%s\n", httpd.arg("version").c_str());
+                        fsUploadFile.close();
+                    }
+                }
+                location = "firmware.html";
+            }
+        }
+        // Redirect the client to the success page
+        httpd.sendHeader("Location", location);
+        httpd.send(303);
+    } else {
+        httpd.send(500, "text/plain", "500: couldn't create file");
+    }
+}
+
+void uploadfile() {
     String filename;
 
     HTTPUpload& upload = httpd.upload();
@@ -327,15 +356,8 @@ void upload() {
           fsUploadFile.write(upload.buf, upload.currentSize);
         break;
      case UPLOAD_FILE_END:
-        if (fsUploadFile) {
-            fsUploadFile.close();
-            debuglog("handleFileUpload Size: %d\n", upload.totalSize);
-            // Redirect the client to the success page
-            httpd.sendHeader("Location","upload.html");
-            httpd.send(303);
-        } else {
-            httpd.send(500, "text/plain", "500: couldn't create file");
-        }
+        // The file is closed by uploadmain()
+        debuglog("handleFileUpload Size: %d\n", upload.totalSize);
         break;
     }
 }
@@ -351,9 +373,7 @@ void websetup() {
     // Web sockets
     httpd.on("/status.ws", HTTP_GET, websockstatus);
     httpd.on("/otlog.ws", HTTP_GET, websockotlog);
-    // Can't pass a nullptr as the main handler function. Instead use
-    // an anonymous function without args and an empty body: [](){}
-    httpd.on("/upload.html", HTTP_POST, [](){}, upload);
+    httpd.on("/upload.html", HTTP_POST, uploadmain, uploadfile);
 
     httpd.begin();
 }

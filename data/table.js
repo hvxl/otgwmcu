@@ -45,8 +45,10 @@ function buildtables(name, data) {
 }
 
 function buildtable(table, name, data) {
-    let title = table.getElementsByTagName("caption")[0]
-    title.innerText = name
+    let title = table.getElementsByTagName("span")[0]
+    if (title) title.innerText = name
+    let add = table.querySelector("[name=pic]")
+    if (add) add.value = name
     let w = table.getElementsByTagName("tbody")[0]
     let orig = w.getElementsByTagName("tr")[0]
     let tbody = document.createElement("tbody")
