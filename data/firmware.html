@@ -9,13 +9,21 @@
 <script src="table.js"></script>
 <style>
 table, th, td {
-  border: 1px solid #509e0e;
+  border: 1px solid var(--color);
 }
 table {
   border-collapse: collapse;
 }
+caption {
+  text-align: left;
+  padding: 1em 0 0.5em;
+  font-size: 150%;
+  font-weight: bold;
+  color: var(--color);
+  text-transform: uppercase;
+}
 th {
-  background: #509e0e;
+  background: var(--color);
   color: #ffffe0;
 }
 td {
@@ -32,7 +40,7 @@ button {
 }
 </style>
 </head>
-<body onload="buildtable('filelist', versionsort(ls, 1))">
+<body onload="buildtables('filelist', ls)">
 <div id="leftmenu">
 <h2>Links</h2>
 <a href="index.html">Status summary</a>
@@ -43,17 +51,19 @@ button {
 </div>
 <div>
 <h1>OTGW firmware upgrade</h1>
+<div style="margin: auto; width: 35em;">
 <div>
-<table style="margin: auto; width: 35em;">
+<table id="filelist" width="100%">
+<caption></caption>
 <thead>
 <tr class="header">
-<th>File</th>
-<th>Version</th>
-<th>Size</th>
-<th>Actions</th>
+<th width="45%">File</th>
+<th width="15%">Version</th>
+<th width="15%">Size</th>
+<th width="25%">Actions</th>
 </tr>
 </thead>
-<tbody id="filelist" style="display: none;">
+<tbody style="display: none;">
 <!-- Row template -->
 <tr>
 <td name="name"></td>
@@ -71,6 +81,11 @@ button {
 </tr>
 </tbody>
 </table>
+</div>
+<br>
+<h2>Current configuration</h2>
+Processor: <span id="processor"></span><br>
+Firmware: <span id="firmware"></span><br>
 </div>
 </div></body>
 </html>

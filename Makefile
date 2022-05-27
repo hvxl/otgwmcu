@@ -80,3 +80,8 @@ install: $(IMAGE) $(FILESYS)
 	$(ESPTOOL) --port $(PORT) -b $(BAUD) write_flash 0x0 $(IMAGE) 0x300000 $(FILESYS)
 
 .PHONY: binaries platform publish clean upload upload-fs install
+
+### Allow customization through a local Makefile: Makefile-local.mk
+
+# Include the local make file, if it exists
+-include Makefile-local.mk

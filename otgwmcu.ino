@@ -1,5 +1,5 @@
 // NodeMCU firmware for the Nodo shop WiFi version of the OTGW
-// Copyright (c) 2021 - Schelte Bron
+// Copyright (c) 2021, 2022 - Schelte Bron
 
 #include "otgwmcu.h"
 #include <Wire.h>
@@ -55,12 +55,17 @@ void fwupgradedone(OTGWError result, short errors = 0, short retries = 0) {
      case OTGW_ERROR_HEX_DATASIZE:
      case OTGW_ERROR_HEX_CHECKSUM:
      case OTGW_ERROR_MAGIC:
+     case OTGW_ERROR_DEVICE:
         blink(500);
         break;
      default:
         blink(100);
         break;
     }
+}
+
+void fwupgradestep(int pct) {
+    debuglog("Upgrade: %d%%\n", pct);
 }
 
 void fwupgradestart(const char *hexfile) {
@@ -72,6 +77,7 @@ void fwupgradestart(const char *hexfile) {
     if (result!= OTGW_ERROR_NONE) {
         fwupgradedone(result);
     } else {
+        Pic.registerProgressCallback(fwupgradestep);
         Pic.registerFinishedCallback(fwupgradedone);
     }
 }
@@ -102,6 +108,10 @@ void setup() {
     proxysetup();
     debugsetup();
     websetup();
+
+#ifdef DEBUG
+    Pic.registerDebugFunc(debuglog);
+#endif
 }
 
 void loop() {

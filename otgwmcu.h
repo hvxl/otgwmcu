@@ -1,4 +1,4 @@
-// Copyright (c) 2021 - Schelte Bron
+// Copyright (c) 2021, 2022 - Schelte Bron
 
 #include <Arduino.h>
 #include <LittleFS.h>
@@ -12,7 +12,7 @@
 #define LED1 D4
 #define LED2 D0
 
-#define FIRMWARE "/gateway.hex"
+#define FIRMWARE "gateway.hex"
 
 extern OTGWSerial Pic;
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2021 - Schelte Bron
+// Copyright (c) 2021, 2022 - Schelte Bron
 
 #include "otgwmcu.h"
 #include "webserver.h"
@@ -11,6 +11,7 @@ WebServer httpd(80);
 
 // Bitmaps for subscriptions of web socket clients
 static unsigned int ws_status, ws_otlog;
+
 static unsigned int updays = 0;
 
 const char *hexheaders[] = {
@@ -84,28 +85,49 @@ void mainpage() {
 }
 
 void filelist() {
-    char *s, buffer[400], version[16];
+    char sep1 = '\0', sep2, s[400], version[16];
+    int n;
     Dir dir;
     File f;
 
-    s += sprintf(s = buffer, "var ls=[");
+    httpd.chunkedResponseModeStart(200, "text/javascript");
+    n = sprintf_P(s, PSTR("var ls={"));
     dir = LittleFS.openDir("/");
     while (dir.next()) {
-        if (dir.fileName().endsWith(".hex")) {
-            String verfile = "/" + dir.fileName();
-            verfile.replace(".hex", ".ver");
-            f = LittleFS.open(verfile, "r");
-            if (f) {
-                f.readBytesUntil('\n', version, 15);
-                f.close();
-            } else {
-                sprintf(version, "0.0");
+        if (!dir.isDirectory()) continue;
+        // if (!dir.fileName().startsWith("pic16f")) continue;
+        if (sep1) {s[n++] = sep1;} else {sep1 = ',';}
+        n += sprintf_P(s + n, PSTR("%s:["), dir.fileName().c_str());
+        sep2 = '\0';
+        Dir subdir = LittleFS.openDir("/" + dir.fileName());
+        while (subdir.next()) {
+            if (subdir.fileName().endsWith(".hex")) {
+                String verfile = "/" + dir.fileName() + "/" + subdir.fileName();
+                verfile.replace(".hex", ".ver");
+                f = LittleFS.open(verfile, "r");
+                if (f) {
+                    f.readBytesUntil('\n', version, 15);
+                    f.close();
+                } else {
+                    sprintf(version, "0.0");
+                }
+                if (sep2) {s[n++] = sep2;} else {sep2 = ',';}
+                n += sprintf_P(s + n, PSTR("{name:'%s',version:'%s',size:%d}"),
+                  subdir.fileName().c_str(), version, subdir.fileSize());
             }
-            s += sprintf(s, "{name:'%s',version:'%s',size:%d},", dir.fileName().c_str(), version, dir.fileSize());
+            if (n >= 300) {
+                httpd.sendContent(s, n);
+                n = 0;
+            }
         }
+        s[n++] = ']';
     }
-    s += sprintf(s, "]\n");
-    httpd.send(200, "text/javascript", buffer);
+    n += sprintf_P(s + n,
+      PSTR("}\nvar processor = '%s', firmware = ['%s', '%s']\n"),
+      Pic.processorToString().c_str(),
+      Pic.firmwareToString().c_str(), Pic.firmwareVersion());
+    httpd.sendContent(s, n);
+    httpd.chunkedResponseFinalize();
 }
 
 void refresh(String filename, String version) {

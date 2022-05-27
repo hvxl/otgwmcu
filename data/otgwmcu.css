@@ -1,3 +1,6 @@
+:root {
+  --color: #509e0e;
+}
 html {
   background: white;
 }
@@ -8,7 +11,7 @@ body {
   margin: 8px;
 }
 h1, h2 {
-  color: #509e0e;
+  color: var(--color);
 }
 h1 {
   text-align: center;
@@ -19,7 +22,7 @@ h1 {
 }
 #leftmenu h2 {
   color: #ffffe0;
-  background: #509e0e;
+  background: var(--color);
   text-align: center;
   margin-top: 0px;
 }
@@ -28,5 +31,4 @@ h1 {
   font-size: 120%;
   padding: 0 0.5em;
   text-decoration: none;
-  
 }
