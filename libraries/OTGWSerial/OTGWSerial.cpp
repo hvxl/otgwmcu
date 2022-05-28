@@ -689,10 +689,7 @@ void OTGWSerial::stateMachine(const unsigned char *packet, int len) {
                 finishUpgrade(OTGW_ERROR_DEVICE);
                 return;
             }
-            // Check bootloader version against the target PIC
-            if (pic == _upgrade_data->model) {
-                // PIC matches the firmware
-            } else if (_upgrade_data->model == PICPROBE) {
+            if (_upgrade_data->model == PICPROBE) {
                 // Select the file depending on the detected PIC model
                 char hexfile[40];
                 snprintf_P(hexfile, sizeof(hexfile), "/%s/%s",
@@ -705,6 +702,10 @@ void OTGWSerial::stateMachine(const unsigned char *packet, int len) {
                     finishUpgrade(rc);
                     return;
                 }
+            }
+            // Check bootloader version against the target PIC
+            if (pic == _upgrade_data->model) {
+                // PIC matches the firmware
             } else {
                 // Device doesn't match the firmware
                 finishUpgrade(OTGW_ERROR_DEVICE);
