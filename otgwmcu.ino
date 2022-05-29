@@ -6,14 +6,18 @@
 #include <WiFiManager.h>
 #include <TZ.h>
 #include <Ticker.h>
+#include <ESP8266httpUpdate.h>
 #include "upgrade.h"
 #include "proxy.h"
 #include "debug.h"
 #include "web.h"
+#include "version.h"
 
 #define WDTPERIOD 5000
 #define WDADDRESS 38
 #define WDPACKET 0xA5
+
+const char updateurl[] = OTA_URL "/update.php";
 
 OTGWSerial Pic(PICRST, LED2);
 
@@ -21,10 +25,38 @@ WiFiManager wifiManager;
 
 // The Nodo shop OTGW hardware contains hardware that will reset
 // the NodeMCU unless the watchdog timer is cleared periodically.
+// https://github.com/letscontrolit/ESPEasy/blob/f05e6b8a6d/TinyI2CWatchdog/
 void clearwdt() {
     Wire.beginTransmission(WDADDRESS);
     Wire.write(WDPACKET);
     Wire.endTransmission();
+}
+
+void enablewdt(bool enable = true) {
+    // Enable/disable the ATtiny85 WDT by writing the action register
+    Wire.beginTransmission(WDADDRESS);
+    Wire.write(7);
+    Wire.write(enable);
+    Wire.endTransmission();
+}
+
+int dumpattiny(char *buffer) {
+    int n = 0;
+    for (int i = 0; i < 19; i++) {
+        delay(1);
+        Wire.beginTransmission(WDADDRESS);
+        Wire.write(0x83);               // command to set pointer
+        Wire.write(i);                  // pointer value to status byte
+        Wire.endTransmission();
+        delay(1);
+        Wire.requestFrom(WDADDRESS, 1);
+        if (Wire.available()) {
+            n += sprintf_P(buffer + n, PSTR("%02x "), Wire.read());
+        } else {
+            return sprintf_P(buffer, PSTR("Not detected"));
+        }
+    }
+    return --n;
 }
 
 void toggle() {
@@ -82,12 +114,67 @@ void fwupgradestart(const char *hexfile) {
     }
 }
 
+void wdtevent() {
+    static unsigned int wdevent = 0;
+
+    if (millis() - wdevent > WDTPERIOD) {
+        clearwdt();
+        wdevent = millis();
+    }
+}
+
+void otaprogress(int n1, int n2) {
+    debuglog("OTA progress: %d%%\n", 100 * n1 / n2);
+    wdtevent();
+}
+
+void otaupgrade() {
+    t_httpUpdate_return ret;
+    WiFiClient wifi;
+#if defined(NO_GLOBAL_INSTANCES) || defined(NO_GLOBAL_HTTPUPDATE)
+    ESP8266HTTPUpdate ESPhttpUpdate;
+#endif
+    String version = VERSION;
+
+    ESPhttpUpdate.setLedPin(LED1, LOW);
+    ESPhttpUpdate.closeConnectionsOnUpdate(false);
+    ESPhttpUpdate.rebootOnUpdate(false);
+    ESPhttpUpdate.onProgress(otaprogress);
+    ret = ESPhttpUpdate.update(wifi, updateurl, version);
+    switch (ret) {
+     case HTTP_UPDATE_FAILED:
+        debuglog("Firmware upgrade failed: %s\n",
+          ESPhttpUpdate.getLastErrorString().c_str());
+        return;
+     case HTTP_UPDATE_NO_UPDATES:
+        debuglog("No update available\n");
+        return;
+     case HTTP_UPDATE_OK:
+        debuglog("Firmware updated\n");
+        break;
+    }
+    // Unmount the file system before updating
+    LittleFS.end();
+    // Perform an upgrade of the file system
+    ret = ESPhttpUpdate.updateFS(wifi, updateurl, version);
+    // Remount the file system, if possible
+    LittleFS.begin();
+    if (ret == HTTP_UPDATE_FAILED) {
+        debuglog("File system upgrade failed: %s\n",
+          ESPhttpUpdate.getLastErrorString().c_str());
+    }
+    debuglog("OTA upgrade finished - Rebooting\n");
+    delay(100);
+    ESP.restart();
+}
+
 void setup() {
     // Mount the file system
     LittleFS.begin();
 
     // Initialize the I/O ports
     pinMode(BUTTON, INPUT_PULLUP);
+    pinMode(OTABTN, INPUT_PULLUP);
     pinMode(LED1, OUTPUT);
     digitalWrite(LED1, HIGH);
     pinMode(LED2, OUTPUT);
@@ -95,6 +182,8 @@ void setup() {
 
     // Setup I2C for the watchdog
     Wire.begin(I2CSDA, I2CSCL);
+    // The WDT should not interfere with the wifiManager connecting to WiFi.
+    enablewdt(false);
 
     // Configure NTP before WiFi, so DHCP can override the NTP server(s)
     configTime(TZ_Europe_Amsterdam, "pool.ntp.org");
@@ -103,6 +192,10 @@ void setup() {
     wifiManager.setDebugOutput(false);
     // wifiManager.resetSettings();
     wifiManager.autoConnect("OTGW-MCU");
+
+    // Activate the WDT
+    clearwdt();
+    enablewdt();
 
     // Prepare the Serial to Network Proxy
     proxysetup();
@@ -115,21 +208,22 @@ void setup() {
 }
 
 void loop() {
-    static unsigned int wdevent = 0, pressed = 0;
+    static unsigned int pressed = 0;
 
-    if (millis() - wdevent > WDTPERIOD) {
-        clearwdt();
-        wdevent = millis();
-    }
+    wdtevent();
 
     if (!Pic.busy()) {
-        if (digitalRead(BUTTON) == 0) {
+        if (digitalRead(BUTTON) == 0 || digitalRead(OTABTN) == 0) {
             if (pressed == 0) {
-                // In the very unlikely case that millis() happens to be 0, the 
+                // In the very unlikely case that millis() happens to be 0, the
                 // user will have to press the button for one millisecond longer.
                 pressed = millis();
             } else if (millis() - pressed > 2000) {
-                fwupgradestart(FIRMWARE);
+                if (digitalRead(OTABTN) == 0) {
+                    otaupgrade();
+                } else {
+                    fwupgradestart(FIRMWARE);
+                }
                 pressed = 0;
             }
         } else {

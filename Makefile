@@ -5,6 +5,9 @@ SOURCES = $(wildcard *.ino *.cpp *.h)
 FSDIR = data
 FILES = $(wildcard $(FSDIR)/*)
 
+# Don't use -DATOMIC_FS_UPDATE
+CFLAGS = --build-property compiler.cpp.extra_flags="-DNO_GLOBAL_HTTPUPDATE"
+
 CLI := arduino-cli
 PLATFORM := esp8266:esp8266
 CFGFILE := arduino-cli.yaml

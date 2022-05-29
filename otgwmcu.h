@@ -8,12 +8,16 @@
 #define I2CSDA D2
 #define BUTTON D3
 #define PICRST D5
+#define OTABTN D6
 
 #define LED1 D4
 #define LED2 D0
 
 #define FIRMWARE "gateway.hex"
+#define OTA_URL "http://otgw.tclcode.com/ota"
 
 extern OTGWSerial Pic;
 
+int dumpattiny(char *buffer);
 void fwupgradestart(const char *hexfile);
+void otaupgrade();

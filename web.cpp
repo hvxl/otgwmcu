@@ -4,6 +4,7 @@
 #include "webserver.h"
 #include "debug.h"
 #include "otmon.h"
+#include "version.h"
 #include <LittleFS.h>
 #include <ESP8266HTTPClient.h>
 
@@ -20,6 +21,8 @@ const char *hexheaders[] = {
     "Last-Modified",
     "X-Version"
 };
+
+static const char useragent[] PROGMEM = "OTGWMCU " VERSION;
 
 unsigned int uptime() {
     static unsigned int tstamp = 0;
@@ -138,6 +141,7 @@ void refresh(String filename, String version) {
     String latest;
     int code;
 
+    http.setUserAgent(FPSTR(useragent));
     http.begin(client, "http://otgw.tclcode.com/download/" + filename);
     http.collectHeaders(hexheaders, 2);
     code = http.sendRequest("HEAD");
@@ -198,7 +202,7 @@ void debuginfo() {
     httpd.chunkedResponseModeStart(200, "text/html");
     httpd.sendContent_P(PSTR("<!DOCTYPE html>\n<html>\n<head>\n"
       "<link rel=\"icon\" type=\"image/png\" href=\"favicon.png\">\n"
-      "<meta charset=\"utf-8\"/>\n<title>Slimme meter</title>\n"
+      "<meta charset=\"utf-8\"/>\n<title>OTGWMCU</title>\n"
       "<style>\nbody {\n  background: white;\n}\n</style>\n"
       "</head>\n<body>\n"));
     // MAC address
@@ -238,6 +242,11 @@ void debuginfo() {
     sprintf_P(buffer, PSTR("Core version: %s<br>SDK version: %s<br>\n"),
       ESP.getCoreVersion().c_str(), ESP.getSdkVersion());
     httpd.sendContent(buffer);
+    // ATtiny85 WDT chip
+    cnt = sprintf_P(buffer, PSTR("WDT chip: "));
+    cnt += dumpattiny(buffer + cnt);
+    cnt += sprintf_P(buffer + cnt, PSTR("<br>\n"));
+    httpd.sendContent(buffer, cnt);
 
     httpd.sendContent_P(PSTR("</body>\n</html>\n"));
     httpd.chunkedResponseFinalize();
@@ -306,8 +315,58 @@ void wsotlog(uint8_t num, WStype_t type, uint8_t *payload, size_t length) {
     websocket(num, type, &ws_otlog);
 }
 
+void otainfo() {
+    WiFiClient client;
+    HTTPClient http;
+    char buffer[80];
+    String latest = "unknown";
+    // Don't spend too much time waiting for a response
+    http.setTimeout(1000);
+    http.setUserAgent(FPSTR(useragent));
+    if (http.begin(client, OTA_URL "/version.txt")) {
+        http.addHeader("x-ESP8266-STA-MAC", WiFi.macAddress());
+        int code = http.GET();
+        if (code == HTTP_CODE_OK) {
+            latest = http.getString();
+        }
+        http.end();
+    }
+    // Remove the newline at the end of the file
+    latest.trim();
+    int len = sprintf_P(buffer, 
+      PSTR("{\"version\":\"" VERSION "\",\"latest\":\"%s\"}"), latest.c_str());
+    httpd.send(200, "application/json", buffer, len);
+}
+
 void websockotlog() {
     httpd.upgrade(wsotlog);
+}
+
+void httpota() {
+    const char *message = PSTR(
+      "<!DOCTYPE html>\n"
+      "<html>\n"
+      "<head>\n"
+      "<meta charset='utf-8'>\n"
+      "<title>OTA upgrade</title>\n"
+      "<style>\n"
+      "html {\n"
+      "  background: white;\n"
+      "}\n"
+      "h1 {\n"
+      "  color: #509e0e;\n"
+      "}\n"
+      "</style>\n"
+      "</head>\n"
+      "<body>\n"
+      "<h1>OTA upgrade</h1>\n"
+      "OTA upgrade started. Check the LED for progress and result.\n"
+      "</body>\n"
+      "</html>\n"
+      );
+    httpd.send_P(202, "text/html", message);
+    delay(200);
+    otaupgrade();
 }
 
 void uploadmain() {
@@ -417,6 +476,8 @@ void websetup() {
     // Maintenance
     httpd.on("/upload.html", HTTP_POST, uploadmain, uploadfile);
     httpd.on("/upgrade.html", HTTP_POST, upgrademain, upgradefile);
+    httpd.on("/otainfo.json", HTTP_GET, otainfo);
+    httpd.on("/ota.html", HTTP_GET, httpota);
 
     httpd.begin();
 }
