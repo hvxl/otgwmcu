@@ -15,7 +15,7 @@ void debuglog(const char *fmt, ...) {
 
     if (debugClient) {
         va_start(argptr, fmt);
-        len = vsprintf(buffer, fmt, argptr);
+        len = vsnprintf_P(buffer, sizeof(buffer), fmt, argptr);
         va_end(argptr);
 
         if (debugClient.availableForWrite() >= len) {

@@ -147,11 +147,11 @@ void refresh(String filename, String version) {
     code = http.sendRequest("HEAD");
     if (code == HTTP_CODE_OK) {
         for (int i = 0; i< http.headers(); i++) {
-            debuglog("%s: %s\n", hexheaders[i], http.header(i).c_str());
+            debuglog(PSTR("%s: %s\n"), hexheaders[i], http.header(i).c_str());
         }
         latest = http.header(1);
         if (latest != version) {
-            debuglog("Update %s: %s -> %s\n", filename.c_str(), version.c_str(), latest.c_str());
+            debuglog(PSTR("Update %s: %s -> %s\n"), filename.c_str(), version.c_str(), latest.c_str());
             http.end();
             http.begin(client, "http://otgw.tclcode.com/download/" + filename);
             code = http.GET();
@@ -166,7 +166,7 @@ void refresh(String filename, String version) {
                     if (f) {
                         f.print(latest + "\n");
                         f.close();
-                        debuglog("Update successful\n");
+                        debuglog(PSTR("Update successful\n"));
                     }
                 }
             }
@@ -179,7 +179,7 @@ void firmware() {
     String action = httpd.arg("action");
     String filename = httpd.arg("name");
     String version = httpd.arg("version");
-    debuglog("Action: %s %s\n", action.c_str(), filename.c_str());
+    debuglog(PSTR("Action: %s %s\n"), action.c_str(), filename.c_str());
     if (action == "download") {
         fwupgradestart(String("/" + filename).c_str());
     } else if (action == "update") {
@@ -268,11 +268,11 @@ unsigned int websockdistribute(const char *str, unsigned int clients) {
 bool websocket(uint8_t num, WStype_t type, unsigned int *clientmap) {
     switch (type) {
      case WStype_CONNECTED:     // if a new websocket connection is established
-        debuglog("[%u] Connected!\n", num);
+        debuglog(PSTR("[%u] Connected!\n"), num);
         if (clientmap) *clientmap |= 1 << num;
         return true;
      case WStype_DISCONNECTED:  // if the websocket is disconnected
-        debuglog("[%u] Disconnected!\n", num);
+        debuglog(PSTR("[%u] Disconnected!\n"), num);
         if (clientmap) *clientmap &= ~(1 << num);
         break;
      default:
@@ -405,7 +405,7 @@ void uploadfile() {
      case UPLOAD_FILE_START:
         filename = upload.filename;
         filename = httpd.arg("target") + "/" + filename;
-        debuglog("handleFileUpload Name: %s\n", filename.c_str());
+        debuglog(PSTR("handleFileUpload Name: %s\n"), filename.c_str());
         // Open the file for writing (create if it doesn't exist)
         fsUploadFile = LittleFS.open(filename, "w");
         break;
@@ -416,7 +416,7 @@ void uploadfile() {
         break;
      case UPLOAD_FILE_END:
         // The file is closed by uploadmain()
-        debuglog("handleFileUpload Size: %d\n", upload.totalSize);
+        debuglog(PSTR("handleFileUpload Size: %d\n"), upload.totalSize);
         break;
     }
 }
@@ -433,30 +433,30 @@ void upgradefile() {
     HTTPUpload& upload = httpd.upload();
     if (upload.status == UPLOAD_FILE_START) {
         // WiFiUDP::stopAll();
-        debuglog("Update: %s\n", upload.filename.c_str());
+        debuglog(PSTR("Update: %s\n"), upload.filename.c_str());
         if (upload.name == "filesystem") {
             //start with max available size
             uint32_t fsSize = (uint32_t)&_FS_end - (uint32_t)&_FS_start;
             close_all_fs();
             if (!Update.begin(fsSize, U_FS)){
-                debuglog("Update error %d\n", Update.getError());
+                debuglog(PSTR("Update error %d\n"), Update.getError());
             }
         } else {
             //start with max available size
             uint32_t fwSize = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
             if (!Update.begin(fwSize)) {
-                debuglog("Update error %d\n", Update.getError());
+                debuglog(PSTR("Update error %d\n"), Update.getError());
             }
         }
     } else if (upload.status == UPLOAD_FILE_WRITE) {
         if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
-            debuglog("Update error %d\n", Update.getError());
+            debuglog(PSTR("Update error %d\n"), Update.getError());
         }
     } else if (upload.status == UPLOAD_FILE_END) {
         if (Update.end(true)) { //true to set the size to the current progress
-            debuglog("Update Success: %u\nRebooting...\n", upload.totalSize);
+            debuglog(PSTR("Update Success: %u\nRebooting...\n"), upload.totalSize);
         } else {
-            debuglog("Update error %d\n", Update.getError());
+            debuglog(PSTR("Update error %d\n"), Update.getError());
         }
     }
     yield();

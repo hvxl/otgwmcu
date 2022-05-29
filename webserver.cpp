@@ -22,14 +22,14 @@ WebSocket::WebSocket(uint8_t id, WiFiClient &client)
     // Do not block while waiting for data
     _client.setTimeout(0);
 
-    debuglog("Connection opened from: %s:%d\n", _client.remoteIP().toString().c_str(), _client.remotePort());
+    debuglog(PSTR("Connection opened from: %s:%d\n"), _client.remoteIP().toString().c_str(), _client.remotePort());
 }
 
 // Destructor
 WebSocket::~WebSocket()
 {
     _client.stop();
-    debuglog("Connection closed\n");
+    debuglog(PSTR("Connection closed\n"));
 }
 
 void WebSocket::disconnect(uint16_t code) {

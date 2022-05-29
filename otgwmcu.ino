@@ -75,7 +75,7 @@ void blink(short delayms = 200) {
 }
 
 void fwupgradedone(OTGWError result, short errors = 0, short retries = 0) {
-    debuglog("Upgrade finished: Errorcode = %d - %d retries, %d errors\n", result, retries, errors);
+    debuglog(PSTR("Upgrade finished: Errorcode = %d - %d retries, %d errors\n"), result, retries, errors);
     switch (result) {
      case OTGW_ERROR_NONE:
         blink(0);
@@ -97,7 +97,7 @@ void fwupgradedone(OTGWError result, short errors = 0, short retries = 0) {
 }
 
 void fwupgradestep(int pct) {
-    debuglog("Upgrade: %d%%\n", pct);
+    debuglog(PSTR("Upgrade: %d%%\n"), pct);
 }
 
 void fwupgradestart(const char *hexfile) {
@@ -124,7 +124,7 @@ void wdtevent() {
 }
 
 void otaprogress(int n1, int n2) {
-    debuglog("OTA progress: %d%%\n", 100 * n1 / n2);
+    debuglog(PSTR("OTA progress: %d%%\n"), 100 * n1 / n2);
     wdtevent();
 }
 
@@ -143,14 +143,14 @@ void otaupgrade() {
     ret = ESPhttpUpdate.update(wifi, updateurl, version);
     switch (ret) {
      case HTTP_UPDATE_FAILED:
-        debuglog("Firmware upgrade failed: %s\n",
+        debuglog(PSTR("Firmware upgrade failed: %s\n"),
           ESPhttpUpdate.getLastErrorString().c_str());
         return;
      case HTTP_UPDATE_NO_UPDATES:
-        debuglog("No update available\n");
+        debuglog(PSTR("No update available\n"));
         return;
      case HTTP_UPDATE_OK:
-        debuglog("Firmware updated\n");
+        debuglog(PSTR("Firmware updated\n"));
         break;
     }
     // Unmount the file system before updating
@@ -160,10 +160,10 @@ void otaupgrade() {
     // Remount the file system, if possible
     LittleFS.begin();
     if (ret == HTTP_UPDATE_FAILED) {
-        debuglog("File system upgrade failed: %s\n",
+        debuglog(PSTR("File system upgrade failed: %s\n"),
           ESPhttpUpdate.getLastErrorString().c_str());
     }
-    debuglog("OTA upgrade finished - Rebooting\n");
+    debuglog(PSTR("OTA upgrade finished - Rebooting\n"));
     delay(100);
     ESP.restart();
 }
