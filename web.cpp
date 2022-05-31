@@ -424,6 +424,7 @@ void uploadfile() {
 void upgrademain() {
     httpd.sendHeader("Connection", "close");
     httpd.send(200, "text/plain", (Update.hasError()) ? "FAIL" : "OK");
+    debuglog(PSTR("Rebooting...\n"));
     delay(100);
     httpd.client().stop();
     ESP.restart();
@@ -437,6 +438,7 @@ void upgradefile() {
         if (upload.name == "filesystem") {
             //start with max available size
             uint32_t fsSize = (uint32_t)&_FS_end - (uint32_t)&_FS_start;
+            debuglog("Filesystem: %d\n", fsSize);
             close_all_fs();
             if (!Update.begin(fsSize, U_FS)){
                 debuglog(PSTR("Update error %d\n"), Update.getError());
@@ -451,10 +453,13 @@ void upgradefile() {
     } else if (upload.status == UPLOAD_FILE_WRITE) {
         if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
             debuglog(PSTR("Update error %d\n"), Update.getError());
+        } else {
+            debuglog(PSTR("Upload: %d bytes\n"), upload.totalSize);
+            wdtevent();
         }
     } else if (upload.status == UPLOAD_FILE_END) {
         if (Update.end(true)) { //true to set the size to the current progress
-            debuglog(PSTR("Update Success: %u\nRebooting...\n"), upload.totalSize);
+            debuglog(PSTR("Update Success: %u\n"), upload.totalSize);
         } else {
             debuglog(PSTR("Update error %d\n"), Update.getError());
         }

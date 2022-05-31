@@ -18,6 +18,7 @@
 
 extern OTGWSerial Pic;
 
+void wdtevent();
 int dumpattiny(char *buffer);
 void fwupgradestart(const char *hexfile);
 void otaupgrade();
