@@ -438,7 +438,7 @@ void upgradefile() {
         if (upload.name == "filesystem") {
             //start with max available size
             uint32_t fsSize = (uint32_t)&_FS_end - (uint32_t)&_FS_start;
-            debuglog("Filesystem: %d\n", fsSize);
+            debuglog(PSTR("Filesystem: %d\n"), fsSize);
             close_all_fs();
             if (!Update.begin(fsSize, U_FS)){
                 debuglog(PSTR("Update error %d\n"), Update.getError());
