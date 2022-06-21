@@ -239,6 +239,10 @@ void OTGWSerial::registerProgressCallback(OTGWUpgradeProgress *func) {
     _progressFunc = func;
 }
 
+void OTGWSerial::registerFirmwareCallback(OTGWFirmwareReport *func) {
+    _firmwareFunc = func;
+}
+
 void OTGWSerial::SetLED(int state) {
     if (_led >= 0) {
         digitalWrite(_led, state ? LOW : HIGH);
@@ -263,6 +267,9 @@ void OTGWSerial::matchBanner(char ch) {
                 _firmware = (OTGWFirmware)i;
                 _banner_matched[i] = 0;
                 _version_pos = 0;
+                if (_firmwareFunc) {
+                    _firmwareFunc(_firmware, _version);
+                }
             } else {
                 _version[_version_pos++] = ch;
             }

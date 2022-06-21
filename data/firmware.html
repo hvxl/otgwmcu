@@ -6,8 +6,12 @@
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="stylesheet" type="text/css" href="otgwmcu.css">
 <script src="filelist.js"></script>
-<script src="table.js"></script>
+<script src="upgrade.js"></script>
 <style>
+h1 {
+  padding: 0.67em;
+  margin: 0em;
+}
 table, th, td {
   border: 1px solid var(--color);
 }
@@ -43,9 +47,43 @@ button {
   border-width: 0px;
   padding: 0.2em 0.5em 0em;
 }
+.wrapper {
+  position: relative;
+  min-height: 100vh;
+}
+#overlay {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 999;
+}
+#download {
+  background: lightgray;
+  width: 50%;
+  margin: 25% auto 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1em 2em;
+}
+#progress {
+  margin: 1em;
+  width: 100%;
+  height: 2em;
+  background: #dff1d6;
+}
+#percent {
+  background: var(--color);
+  height: 100%;
+  width: 25%;
+}
+#status {
+  align-self: start;
+}
 </style>
 </head>
-<body onload="buildtables('filelist', ls)">
+<body>
 <div id="leftmenu">
 <h2>Links</h2>
 <a href="index.html">Status summary</a>
@@ -54,17 +92,27 @@ button {
 <br>
 <a href="about.html">About</a>
 </div>
-<div>
+<div id="infoarea">
+<div class="wrapper">
+<div id="overlay" style="display: none;">
+<div id="download">
+Download progress
+<div id="progress">
+<div id="percent"></div>
+</div>
+<div id="status"></div>
+</div>
+</div>
 <h1>OTGW firmware upgrade</h1>
 <div style="margin: auto; width: 35em;">
 <div>
 <table id="filelist" width="100%">
 <caption>
 <div>
-<span></span>
+<span>&nbsp;</span>
 <form action="upload.html">
 <input type="hidden" name="pic" value="">
-<button><img src="add.png" alt="Add" title="Add"></button>
+<button value="add"><img src="add.png" alt="Add" title="Add"></button>
 </form>
 </div>
 </caption>
@@ -79,16 +127,16 @@ button {
 <tbody style="display: none;">
 <!-- Row template -->
 <tr>
-<td name="name"></td>
-<td name="version"></td>
-<td name="size"></td>
+<td data-name="name"></td>
+<td data-name="version"></td>
+<td data-name="size"></td>
 <td class="actions">
 <form method="post">
 <input type="hidden" name="name" value="">
 <input type="hidden" name="version" value="">
-<button name="action" value="delete"><img src="trash.png" alt="Delete" title="Delete"></button>
-<button name="action" value="update"><img src="refresh.png" alt="Update" title="Update"></button>
-<button name="action" value="download"><img src="download.png" alt="Download" title="Download"></button>
+<button name="command" value="delete"><img src="trash.png" alt="Delete" title="Delete"></button>
+<button name="command" value="update"><img src="refresh.png" alt="Update" title="Update"></button>
+<button name="command" value="download"><img src="download.png" alt="Download" title="Download"></button>
 </form>
 </td>
 </tr>
@@ -99,6 +147,7 @@ button {
 <h2>Current configuration</h2>
 Processor: <span id="processor"></span><br>
 Firmware: <span id="firmware"></span><br>
+</div>
 </div>
 </div></body>
 </html>

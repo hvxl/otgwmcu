@@ -17,8 +17,6 @@
 #define WDADDRESS 38
 #define WDPACKET 0xA5
 
-const char updateurl[] = OTA_URL "/update.php";
-
 OTGWSerial Pic(PICRST, LED2);
 
 WiFiManager wifiManager;
@@ -74,7 +72,15 @@ void blink(short delayms = 200) {
     }
 }
 
+void firmwarereport(OTGWFirmware fw, const char *version) {
+    websockprogress(PSTR("{\"processor\":\"%s\",\"firmware\":[\"%s\",\"%s\"]}"),
+      Pic.processorToString().c_str(),
+      Pic.firmwareToString(fw).c_str(), version);
+}
+
 void fwupgradedone(OTGWError result, short errors = 0, short retries = 0) {
+    websockprogress(PSTR("{%s\"result\":%d,\"errors\":%d,\"retries\":%d}"),
+      result ? "" : "\"percent\":100,", result, errors, retries);
     debuglog(PSTR("Upgrade finished: Errorcode = %d - %d retries, %d errors\n"), result, retries, errors);
     switch (result) {
      case OTGW_ERROR_NONE:
@@ -97,6 +103,7 @@ void fwupgradedone(OTGWError result, short errors = 0, short retries = 0) {
 }
 
 void fwupgradestep(int pct) {
+    websockprogress(PSTR("{\"percent\":%d}"), pct);
     debuglog(PSTR("Upgrade: %d%%\n"), pct);
 }
 
@@ -123,6 +130,19 @@ void wdtevent() {
     }
 }
 
+String otaurl() {
+    String rc;
+    File f = LittleFS.open("/otaurl.txt", "r");
+    if (f) {
+        rc = f.readStringUntil('\n');
+        f.close();
+        if (rc.endsWith("\r")) rc.remove(rc.length() - 1);
+    } else {
+        rc = F(OTA_URL);
+    }
+    return rc;
+}
+
 void otaprogress(int n1, int n2) {
     debuglog(PSTR("OTA progress: %d%%\n"), 100 * n1 / n2);
     wdtevent();
@@ -135,6 +155,7 @@ void otaupgrade() {
     ESP8266HTTPUpdate ESPhttpUpdate;
 #endif
     String version = VERSION;
+    String updateurl = otaurl() + "/update.php";
 
     ESPhttpUpdate.setLedPin(LED1, LOW);
     ESPhttpUpdate.closeConnectionsOnUpdate(false);
@@ -205,6 +226,7 @@ void setup() {
 #ifdef DEBUG
     Pic.registerDebugFunc(debuglog);
 #endif
+    Pic.registerFirmwareCallback(firmwarereport);
 }
 
 void loop() {

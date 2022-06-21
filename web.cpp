@@ -11,7 +11,7 @@
 WebServer httpd(80);
 
 // Bitmaps for subscriptions of web socket clients
-static unsigned int ws_status, ws_otlog;
+static unsigned int ws_status, ws_otlog, ws_progress;
 
 static unsigned int updays = 0;
 
@@ -176,13 +176,13 @@ void refresh(String filename, String version) {
 }
 
 void firmware() {
-    String action = httpd.arg("action");
+    String action = httpd.arg("command");
     String filename = httpd.arg("name");
-    String version = httpd.arg("version");
     debuglog(PSTR("Action: %s %s\n"), action.c_str(), filename.c_str());
     if (action == "download") {
         fwupgradestart(String("/" + filename).c_str());
     } else if (action == "update") {
+        String version = httpd.arg("version");
         refresh(filename, version);
     } else if (action == "delete") {
         String path = "/" + filename;
@@ -297,10 +297,6 @@ void wsstatus(uint8_t num, WStype_t type, uint8_t *payload, size_t length) {
     }
 }
 
-void websockstatus() {
-    httpd.upgrade(wsstatus);
-}
-
 void websockotmessage(char dir, unsigned message) {
     char buffer[256];
     int len;
@@ -323,7 +319,7 @@ void otainfo() {
     // Don't spend too much time waiting for a response
     http.setTimeout(1000);
     http.setUserAgent(FPSTR(useragent));
-    if (http.begin(client, OTA_URL "/version.txt")) {
+    if (http.begin(client, otaurl() + "/version.txt")) {
         http.addHeader("x-ESP8266-STA-MAC", WiFi.macAddress());
         int code = http.GET();
         if (code == HTTP_CODE_OK) {
@@ -338,8 +334,20 @@ void otainfo() {
     httpd.send(200, "application/json", buffer, len);
 }
 
-void websockotlog() {
-    httpd.upgrade(wsotlog);
+void websockprogress(const char *fmt, ...) {
+    if (ws_progress != 0) {
+        char buffer[256];
+        int len;
+        va_list argptr;
+        va_start(argptr, fmt);
+        len = vsnprintf_P(buffer, sizeof(buffer), fmt, argptr);
+        va_end(argptr);
+        websockdistribute(buffer, ws_progress);
+    }
+}
+
+void wsdownload(uint8_t num, WStype_t type, uint8_t *payload, size_t length) {
+    websocket(num, type, &ws_progress);
 }
 
 void httpota() {
@@ -476,8 +484,9 @@ void websetup() {
     httpd.on("/firmware.html", HTTP_POST, firmware);
     httpd.on("/debug.html", HTTP_GET, debuginfo);
     // Web sockets
-    httpd.on("/status.ws", HTTP_GET, websockstatus);
-    httpd.on("/otlog.ws", HTTP_GET, websockotlog);
+    httpd.on("/status.ws", HTTP_GET, [](){httpd.upgrade(wsstatus);});
+    httpd.on("/otlog.ws", HTTP_GET, [](){httpd.upgrade(wsotlog);});
+    httpd.on("/download.ws", HTTP_GET, [](){httpd.upgrade(wsdownload);});
     // Maintenance
     httpd.on("/upload.html", HTTP_POST, uploadmain, uploadfile);
     httpd.on("/upgrade.html", HTTP_POST, upgrademain, upgradefile);
