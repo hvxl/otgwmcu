@@ -33,7 +33,7 @@ struct {
 
 unsigned errorcnt[4];
 static unsigned short store[64];
-static uint64_t storemap[1];
+static uint32_t storemap[2];
 
 int otflags(char *s, unsigned val, int cnt = 8) {
     int mask;
@@ -202,10 +202,12 @@ void otstatus(unsigned raw) {
      case 23:   // setpoint2
      case 24:   // roomtemp
      case 37:   // roomtemp2
+        // Only report if the value came from the thermostat
         report = report || msg.frame.msgtype == 1;
         if (!report) break;
      case 9:    // override
      case 17:   // modulation
+     case 18:   // pressure
      case 25:   // boilertemp
      case 26:   // dhwtemp
      case 28:   // returntemp
@@ -213,6 +215,7 @@ void otstatus(unsigned raw) {
      case 32:   // dhwtemp2
      case 56:   // dhwsetpoint
      case 57:   // chwsetpoint
+        // Only report if the value came from the boiler, or on fall-through
         report = report || msg.frame.msgtype == 4;
         if (!report) break;
      case 27:   // outside
@@ -221,7 +224,7 @@ void otstatus(unsigned raw) {
             value = msg.frame.value ? msg.frame.value : 1;
             if (value != store[msg.frame.dataid]) {
                 store[msg.frame.dataid] = value;
-                bitSet(storemap[msg.frame.dataid / 64], msg.frame.dataid % 64);
+                bitSet(storemap[msg.frame.dataid / 32], msg.frame.dataid % 32);
                 // Transfer numbers as strings to keep the formatting
                 sprintf(jsonbuf, "{\"msgid%d\":\"%.2f\"}", msg.frame.dataid, (short)msg.frame.value / 256.);
                 websockreport(jsonbuf);
@@ -248,7 +251,7 @@ void initialreport(int num) {
 
     jsonbuf[0] = '{';
     for (i = 0; i < 64; i++) {
-        if (bitRead(storemap[i / 64], i % 64) == 0) continue;
+        if (bitRead(storemap[i / 32], i % 32) == 0) continue;
         switch (i) {
          case 0:    // status
             cnt += bitflags(jsonbuf + cnt + 1, i, store[i], 0x1fff);
@@ -263,6 +266,7 @@ void initialreport(int num) {
          case 14:   // maxmod
          case 16:   // setpoint
          case 17:   // modulation
+         case 18:   // pressure
          case 23:   // setpoint2
          case 24:   // roomtemp
          case 25:   // boilertemp
