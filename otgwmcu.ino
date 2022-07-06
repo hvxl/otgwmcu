@@ -210,6 +210,10 @@ void setup() {
     configTime(TZ_Europe_Amsterdam, "pool.ntp.org");
 
     // Setup WiFi
+    // Set the mode to use after WifiManager finishes. Without this, it may
+    // end up in WIFI_AP_STA mode. See issue #2
+    WiFi.mode(WIFI_STA);
+    // Don't confuse the PIC with debug output
     wifiManager.setDebugOutput(false);
     // wifiManager.resetSettings();
     wifiManager.autoConnect("OTGW-MCU");
