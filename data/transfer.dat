@@ -19,3 +19,9 @@ id  version	address	size	mask	name
 7   4.1		0d	1	0	ThermostatModel
 8   4.2.7	0e	1	cf	Configuration
 8   4.2.8	0e	1	0	Configuration
+9   5.5		0f	2	0	DHWSetting
+9   6.0		0	0	0	DHWSetting
+9   6.2		0f	2	0	DHWSetting
+10  5.5		11	2	0	MaxCHSetting
+10  6.0		0	0	0	MaxCHSetting
+10  6.2		11	2	0	MaxCHSetting
