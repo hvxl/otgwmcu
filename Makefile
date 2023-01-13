@@ -6,7 +6,8 @@ FSDIR = data
 FILES = $(wildcard $(FSDIR)/*)
 
 # Don't use -DATOMIC_FS_UPDATE
-CFLAGS = --build-property compiler.cpp.extra_flags="-DNO_GLOBAL_HTTPUPDATE"
+CFLAGS_DEFAULT = -DNO_GLOBAL_HTTPUPDATE
+CFLAGS = $(CFLAGS_DEFAULT)
 
 CLI := arduino-cli
 PLATFORM := esp8266:esp8266
@@ -55,7 +56,7 @@ libraries/WiFiManager: | $(BOARDS)
 	$(CLI) lib install WiFiManager@2.0.3-alpha
 
 $(IMAGE): $(BOARDS) $(LIBRARIES) $(SOURCES)
-	$(CLI) compile --config-file $(CFGFILE) --fqbn=$(FQBN) --warnings default --verbose $(CFLAGS)
+	$(CLI) compile --config-file $(CFGFILE) --fqbn=$(FQBN) --warnings default --verbose --build-property compiler.cpp.extra_flags="$(CFLAGS)"
 
 $(FILESYS): $(FILES) $(CONF) | $(BOARDS) clean
 	$(MKFS) -p 256 -b 8192 -s 1024000 -c $(FSDIR) $@
@@ -70,6 +71,10 @@ $(PROJ).zip: $(PROJ)-fw.bin $(PROJ)-fs.bin
 	rm -f $@
 	zip $@ $^
 
+# Build the image with debugging output on port 45256
+debug: CFLAGS = $(CFLAGS_DEFAULT) -DDEBUG
+debug: $(IMAGE)
+
 # Load only the sketch into the device
 upload: $(IMAGE)
 	$(ESPTOOL) --port $(PORT) -b $(BAUD) write_flash 0x0 $(IMAGE)
@@ -82,7 +87,7 @@ upload-fs: $(FILESYS)
 install: $(IMAGE) $(FILESYS)
 	$(ESPTOOL) --port $(PORT) -b $(BAUD) write_flash 0x0 $(IMAGE) 0x300000 $(FILESYS)
 
-.PHONY: binaries platform publish clean upload upload-fs install
+.PHONY: binaries platform publish clean upload upload-fs install debug
 
 ### Allow customization through a local Makefile: Makefile-local.mk
 
