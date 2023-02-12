@@ -33,6 +33,8 @@ export PYTHONPATH = $(TOOLS)/pyserial
 
 binaries: $(IMAGE)
 
+filesystem: $(FILESYS)
+
 publish: $(PROJ)-fs.bin $(PROJ)-fw.bin
 
 platform: $(BOARDS)

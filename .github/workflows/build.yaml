@@ -1,0 +1,74 @@
+---
+name: Build binary
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the code
+        id: checkout
+        uses: actions/checkout@v3
+
+      - name: Set up build environment
+        id: apt
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+        shell: bash
+
+      - name: Install python
+        id: python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install arduino-cli
+        id: cli
+        env:
+          CLIURL: "https://raw.githubusercontent.com/\
+            arduino/arduino-cli/master/install.sh"
+        run: >
+          curl -fsSL $CLIURL | BINDIR=/usr/local/bin sh
+        shell: bash
+
+      - name: Build wemos image
+        id: build
+        run: make -j$(nproc)
+        shell: bash
+
+      - name: Extract version
+        id: version
+        run: >
+          sed -n 's/^#define VERSION "\(.*\)"$/version=\1/p'
+          version.h >> $GITHUB_OUTPUT
+        shell: bash
+
+      - name: Build the file system
+        id: filesys
+        env:
+          DISTDIR: otgwmcu-${{steps.version.outputs.version}}
+        run: |
+          mkdir -p $DISTDIR
+          make filesystem FILESYS=$DISTDIR/otgwmcu.fs.bin
+        shell: bash
+
+      - name: Copy binaries
+        id: copy
+        env:
+          DISTDIR: otgwmcu-${{steps.version.outputs.version}}
+        run: |
+          mkdir -p $DISTDIR
+          cp -p build/*/*.{bin,elf} $DISTDIR
+        shell: bash
+
+      - name: Upload tar file
+        id: upload
+        uses: actions/upload-artifact@v3
+        with:
+          name: otgwmcu-${{steps.version.outputs.version}}
+          path: otgwmcu-*
