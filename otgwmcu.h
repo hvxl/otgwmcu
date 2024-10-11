@@ -20,6 +20,9 @@ extern OTGWSerial Pic;
 
 void wdtevent();
 int dumpattiny(char *buffer);
+void command(const char* str);
 void fwupgradestart(const char *hexfile);
 String otaurl();
 void otaupgrade();
+void flashpic();
+void verifypic();

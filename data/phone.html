@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>OTGW Phone control</title>
+<link rel="icon" type="image/png" href="favicon.png">
+<meta name="viewport" content="width=device-width, initial-scale=1.0,maximum-scale=1.0, user-scalable=0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style type="text/css">
+body {
+  font-family: sans-serif;
+  margin: 0px;
+}
+hr {
+  border: 1px;
+  width: 100%;
+}
+th {
+  border-bottom: 1px solid #808080;
+  font-size: 20px;
+}
+td {
+  height: 100%;
+}
+div.setpoint {
+  font-size: 100px;
+}
+div.half {
+  font-size: 35px;
+}
+object {
+  border: 1px solid #808080;
+  background-color: #ffffff;
+}
+.main {
+  padding: 8px;
+}
+.main table {
+  border: 2px solid #808080;
+  -moz-border-radius:10px;
+  -webkit-border-radius:10px;
+  padding: 0px;
+  margin-top: 20px;
+  background-color: #f6f6f6;
+  width: 100%;
+}
+.main button {
+  padding: 0px;
+  margin: 8px;
+  font-size: 24px;
+  width: 60px;
+}
+.nav {
+  position: absolute; bottom: 0px; width: 100%;
+}
+.nav table {
+  width: 100%;
+}
+.nav button {
+  width: 100%;
+  padding: 0px;
+  margin: 0px;
+  background-color: #dddddd;
+  -webkit-border-radius:5px;
+}
+input:active {
+  position:relative;
+  top: 3px;
+}
+#container {
+  position: relative;
+}
+#container #dhwmode {
+  position:absolute;
+  top: -26;
+  left: 0;
+}
+
+/* Hide the default checkbox */
+input[type="checkbox"] {
+  display: none;
+}
+
+/* Custom label as the clickable area for the checkbox */
+.custom-checkbox {
+  display: inline-block;
+  width: 40px;
+  height: 40px;
+  background-size: cover;
+}
+
+#connection {
+  width: 22px;
+  height: 22px;
+  background-image: url('offline.png');
+}
+
+input[type="checkbox"]:checked + #connection {
+  background-image: url('online.png');
+}
+
+#flame {
+  background-image: url('flame-off.png');
+}
+
+input[type="checkbox"]:checked + #flame {
+  background-image: url('flame-on.png');
+}
+
+#chmode {
+  background-image: url('chmode-off.png');
+}
+
+input[type="checkbox"]:checked + #chmode {
+  background-image: url('chmode-on.png');
+}
+
+#dhwmode {
+  background-image: url('dhwmode-off.png');
+}
+
+input[type="checkbox"]:checked + #dhwmode {
+  background-image: url('dhwmode-on.png');
+}
+</style>
+<script src="status.js"></script>
+</head>
+<body onload="connect('status.ws', wsdata)">
+<div class="main">
+<form method="post" autocomplete="off">
+<table>
+<tr>
+<th colspan="8">
+<img src="blank22.png" style="float:left;">
+Heating
+<label style="float:right;">
+  <input type="checkbox" id="websock" onclick="return false">
+  <span class="custom-checkbox" id="connection"></span>
+</label>
+</th>
+</tr>
+<tr>
+<td colspan="8" align="center">
+Inside temperature:
+<span id="msgid24">20</span>&deg;C
+</td>
+</tr>
+<tr>
+<td width="20%"></td>
+<td valign="center" width="40">
+<span id="container">
+<label>
+  <input type="checkbox" id="msgid0LB1" onclick="return false">
+  <span class="custom-checkbox" id="chmode"></span>
+</label>
+<label>
+  <input type="checkbox" id="msgid0LB2" onclick="return false">
+  <span class="custom-checkbox" id="dhwmode"></span>
+</label>
+</span>
+</td>
+<td width="20%"></td>
+<td align="right" rowspan="2" width="100">
+<div class="setpoint" id="msgid16-units">20</div>
+<input type="text" id="msgid16" style="display: none;" onchange="roomsetpoint.set(this.value)" value="20">
+</td>
+<td valign="center">
+<div class="half">&deg;C</div>
+</td>
+<td width="20%"></td>
+<td width="40" align="center">
+<input type="image" name="hvac" value="+" src="warmer.png" onclick="return control('Up', event)">
+</td>
+<td width="20%"></td>
+</tr>
+<tr>
+<td></td>
+<td valign="center">
+<label>
+  <input type="checkbox" id="msgid0LB3" onclick="return false">
+  <span class="custom-checkbox" id="flame"></span>
+</label>
+</td>
+<td></td>
+<td style="vertical-align:baseline;">
+<div id="msgid16-half" class="half">.0</div>
+</td>
+<td></td>
+<td align="center">
+<input type="image" name="hvac" value="+" src="colder.png" onclick="return control('Down', event)">
+</td>
+<td></td>
+</tr>
+<tr>
+<td colspan="8" align="center">
+Outside temperature:
+<span id="msgid27">---</span>&deg;C
+</td>
+</tr>
+</table>
+</form>
+</div>
+<script type="text/javascript">
+class Setpoint {
+    constructor(name, min, max, step, command) {
+	this.w = document.getElementById(name)
+	this.min = min
+	this.max = max
+	this.step = step
+	this.command = command
+	this.request = null
+    }
+
+    control(op) {
+	if (!this.request) {
+	    this.request = parseFloat(w.value)
+	}
+	if (op == "Up") {
+	    this.request += this.step
+	} else if (op == "Down") {
+	    this.request -+ this.step
+	} else {
+	    return
+	}
+	this.request = Math.round(this.request / this.step) * this.step
+	command(this.command + "=" + this.request)
+	this.show(this.request)
+	return false
+    }
+
+    parts(unit, half) {
+	this.unitid = document.getElementById(unit)
+	this.halfid = document.getElementById(half)
+    }
+
+    show(value) {
+	this.w.value = value
+	if (this.unitid) {
+	    let num = Math.floor(value)
+	    this.unitid.innerHTML = num
+	    if (this.halfid) {
+		this.halfid.innerHTML = value - num >= 0.5 ? ".5" : ".0"
+	    }
+	}
+    }
+
+    set(value) {
+	this.show(value)
+	this.request = value
+    }
+}
+
+function command(str) {
+    const xhr = new XMLHttpRequest()
+    xhr.open("POST", "/command.cgi", true)
+    xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded")
+    xhr.send("cmd=" + str)
+}
+
+const roomsetpoint = new Setpoint('msgid16', 5, 30, 0.5, 'TT')
+roomsetpoint.parts('msgid16-units', 'msgid16-half')
+// const dhwsetpoint = new Setpoint('msgid56', 35, 65, 1, 'SW')
+// const chsetpoint = new Setpoint('msgid57', 20, 80, 1, 'SH')
+</script>
+</body>
+</html>

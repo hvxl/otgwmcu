@@ -7,8 +7,10 @@
 #include "version.h"
 #include <LittleFS.h>
 #include <ESP8266HTTPClient.h>
+#include <ESP8266HTTPUpdateServer.h>
 
 WebServer httpd(80);
+ESP8266HTTPUpdateServer httpUpdater(false);
 
 // Bitmaps for subscriptions of web socket clients
 static unsigned int ws_status, ws_otlog, ws_progress;
@@ -194,6 +196,14 @@ void firmware() {
     httpd.send(303, "text/html", "<a href='firmware.html'>Return</a>");
 }
 
+void httpcmd() {
+    String cmd = httpd.arg("cmd");
+    if (cmd) {
+        command(cmd.c_str());
+    }
+    httpd.send(200, "text/plain", "Command sent");
+}
+
 void debuginfo() {
     FSInfo fsinfo;
     char buffer[250];
@@ -309,6 +319,17 @@ void websockotmessage(char dir, unsigned message) {
 
 void wsotlog(uint8_t num, WStype_t type, uint8_t *payload, size_t length) {
     websocket(num, type, &ws_otlog);
+}
+
+void httpflash() {
+    String confirm = httpd.arg("confirm");
+    if (confirm == "Start") {
+        flashpic();
+    } else if (confirm == "Verify") {
+        verifypic();
+    }
+    httpd.sendHeader("Location", "index.html", true);
+    httpd.send(303, "text/html", "<a href='index.html'>Return</a>");
 }
 
 void otainfo() {
@@ -482,6 +503,7 @@ void websetup() {
     httpd.on("/", HTTP_GET, mainpage);
     httpd.on("/filelist.js", HTTP_GET, filelist);
     httpd.on("/firmware.html", HTTP_POST, firmware);
+    httpd.on("/command.cgi", HTTP_POST, httpcmd);
     httpd.on("/debug.html", HTTP_GET, debuginfo);
     // Web sockets
     httpd.on("/status.ws", HTTP_GET, [](){httpd.upgrade(wsstatus);});
@@ -490,9 +512,11 @@ void websetup() {
     // Maintenance
     httpd.on("/upload.html", HTTP_POST, uploadmain, uploadfile);
     httpd.on("/upgrade.html", HTTP_POST, upgrademain, upgradefile);
+    httpd.on("/flash.html", HTTP_POST, httpflash);
     httpd.on("/otainfo.json", HTTP_GET, otainfo);
     httpd.on("/ota.html", HTTP_GET, httpota);
 
+    httpUpdater.setup(&httpd, "/update.html");
     httpd.begin();
 }
 

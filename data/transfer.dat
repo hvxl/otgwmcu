@@ -26,3 +26,5 @@ id  version	address	size	mask	name
 10  5.5		11	2	0	MaxCHSetting
 10  6.0		0	0	0	MaxCHSetting
 10  6.2		11	2	0	MaxCHSetting
+11  6.5.5	13	1	0	MessageInterval
+8   6.5.7	0e	1	82	Configuration

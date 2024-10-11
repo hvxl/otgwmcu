@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Flash PIC</title>
+<link rel="icon" type="image/png" href="/favicon.png">
+<link rel="stylesheet" type="text/css" href="otgwmcu.css">
+<style>
+body {
+  display: block;
+  margin: 6pt;
+}
+form {
+  margin: 6pt 100pt;
+}
+input {
+  width: 50pt;
+  margin: 6pt 20pt;
+}
+</style>
+</head>
+<body>
+<h1>Flash PIC</h1>
+The OTGW can be used to flash a blank PIC16F1847. To be able to do this, 2
+wires must be added to the circuit:
+<ol>
+<li>From Wemos pin D6 to PIC pin 12
+<li>From Wemos pin D7 to PIC pin 13
+</ol>
+Nodo shop OTGW hardware versions 1.12 and later have 2 sets of jumper pads
+marked "LVP" that facilitate making these connections.
+<p>
+Monitor the debug port (port 45256) for notifications about the result.
+<p>
+<b>Note</b>: If the PIC is not blank but has low voltage programming (LVP)
+enabled, this will erase the old program.
+<p>
+<form method="POST">
+<input type="submit" name="confirm" value="Start">
+<input type="submit" name="confirm" value="Verify">
+<input type="submit" name="confirm" value="Cancel">
+</form>
+</body>
+</html>

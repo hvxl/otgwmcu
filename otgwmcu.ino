@@ -8,6 +8,7 @@
 #include <Ticker.h>
 #include <ESP8266httpUpdate.h>
 #include "upgrade.h"
+#include "icsp.h"
 #include "proxy.h"
 #include "debug.h"
 #include "web.h"
@@ -17,8 +18,13 @@
 #define WDADDRESS 38
 #define WDPACKET 0xA5
 
-OTGWSerial Pic(PICRST, LED2);
+typedef enum {
+    OPER_NORMAL,
+    OPER_FLASH
+} opermode_t;
 
+opermode_t opermode;
+OTGWSerial Pic(PICRST, LED2);
 WiFiManager wifiManager;
 
 // The Nodo shop OTGW hardware contains hardware that will reset
@@ -70,6 +76,34 @@ void blink(short delayms = 200) {
         blinker.detach();
         digitalWrite(LED1, HIGH);
     }
+}
+
+void buttonevent() {
+    static unsigned int pressed = 0;
+
+    if (Pic.busy()) return;
+    if (digitalRead(BUTTON) == 0 || digitalRead(OTABTN) == 0) {
+        if (pressed == 0) {
+            // In the very unlikely case that millis() happens to be 0, the
+            // user will have to press the button for one millisecond longer.
+            pressed = millis();
+        } else if (millis() - pressed > 2000) {
+            if (digitalRead(OTABTN) == 0) {
+                debuglog(PSTR("OTA request "));
+                otaupgrade();
+            } else {
+                fwupgradestart(FIRMWARE);
+            }
+            pressed = 0;
+        }
+    } else {
+        pressed = 0;
+    }
+}
+
+void command(const char* str) {
+    Pic.write(str);
+    Pic.write('\r');
 }
 
 void firmwarereport(OTGWFirmware fw, const char *version) {
@@ -189,6 +223,48 @@ void otaupgrade() {
     ESP.restart();
 }
 
+void flashpic() {
+    icspresult result;
+    result = icsp_program();
+    switch (result) {
+     case ICSP_NO_FILE:
+        debuglog(PSTR("File not found\n"));
+        break;
+     case ICSP_NO_PIC:
+        debuglog(PSTR("No PIC found\n"));
+        break;
+     case ICSP_PROGRAM:
+     case ICSP_CONTINUE:
+        opermode = OPER_FLASH;
+        return;
+     default:
+        // This should not happen
+        break;
+    }
+    pinMode(OTABTN, INPUT_PULLUP);
+}
+
+void verifypic() {
+    icspresult result;
+    result = icsp_verify();
+    switch (result) {
+     case ICSP_NO_FILE:
+        debuglog(PSTR("File not found\n"));
+        break;
+     case ICSP_NO_PIC:
+        debuglog(PSTR("No PIC found\n"));
+        break;
+     case ICSP_VERIFY:
+     case ICSP_CONTINUE:
+        opermode = OPER_FLASH;
+        return;
+     default:
+        // This should not happen
+        break;
+    }
+    pinMode(OTABTN, INPUT_PULLUP);
+}
+
 void setup() {
     // Mount the file system
     LittleFS.begin();
@@ -222,6 +298,8 @@ void setup() {
     clearwdt();
     enablewdt();
 
+    opermode = OPER_NORMAL;
+
     // Prepare the Serial to Network Proxy
     proxysetup();
     debugsetup();
@@ -234,30 +312,50 @@ void setup() {
 }
 
 void loop() {
-    static unsigned int pressed = 0;
-
     wdtevent();
-
-    if (!Pic.busy()) {
-        if (digitalRead(BUTTON) == 0 || digitalRead(OTABTN) == 0) {
-            if (pressed == 0) {
-                // In the very unlikely case that millis() happens to be 0, the
-                // user will have to press the button for one millisecond longer.
-                pressed = millis();
-            } else if (millis() - pressed > 2000) {
-                if (digitalRead(OTABTN) == 0) {
-                    otaupgrade();
-                } else {
-                    fwupgradestart(FIRMWARE);
-                }
-                pressed = 0;
-            }
-        } else {
-            pressed = 0;
+    if (opermode == OPER_FLASH) {
+        icspresult result = icsp_step();
+        switch (result) {
+         case ICSP_CONTINUE:
+            break;
+         case ICSP_VERIFY:
+            break;
+         case ICSP_FINISHED:
+            debuglog(PSTR("Errors: %d\n"), icsperrors());
+            break;
+         case ICSP_NO_PIC:
+            debuglog(PSTR("No PIC found\n"));
+            break;
+         case ICSP_NO_FILE:
+            debuglog(PSTR("File not found\n"));
+            break;
+         case ICSP_NO_DATA:
+            debuglog(PSTR("Data not found\n"));
+            break;
+         case ICSP_NO_CHECKSUM:
+            debuglog(PSTR("Checksum not found\n"));
+            break;
+         case ICSP_FORMAT_ERROR:
+            debuglog(PSTR("Format error\n"));
+            break;
+         case ICSP_CHECKSUM_ERROR:
+            debuglog(PSTR("Checksum error\n"));
+            break;
+         case ICSP_UNKNOWN_TAG:
+            debuglog(PSTR("Unknown tag\n"));
+            break;
+         case ICSP_TOO_MANY_ERRORS:
+            debuglog(PSTR("Too many errors\n"));
+            break;
         }
+        if (result != ICSP_CONTINUE && result != ICSP_VERIFY) {
+            pinMode(OTABTN, INPUT_PULLUP);
+            opermode = OPER_NORMAL;
+        }
+    } else {
+        buttonevent();
+        proxyevent();
     }
-
-    proxyevent();
     debugevent();
     webevent();
 }
